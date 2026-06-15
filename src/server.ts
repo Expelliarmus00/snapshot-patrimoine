@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +27,12 @@ const app = Fastify({
 await app.register(cors, {
   origin: config.APP_URL,
   credentials: true,
+});
+
+await app.register(rateLimit, {
+  max: 120,       // 120 requêtes par fenêtre (usage personnel, pas de throttle agressif)
+  timeWindow: '1 minute',
+  errorResponseBuilder: () => ({ error: 'rate_limit_exceeded' }),
 });
 
 // Cookie en lecture seule (pas de secret — on ne signe pas ici, on forward au dashboard)

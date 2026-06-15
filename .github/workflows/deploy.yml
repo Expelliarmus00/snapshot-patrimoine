@@ -28,7 +28,8 @@ jobs:
         run: |
           npm ci
           npm run build
-          npx prisma db push --skip-generate --accept-data-loss
+          node --test test/calc.test.mjs
+          npx prisma db push --skip-generate
           sudo systemctl restart "$SERVICE"
 
       - name: Health check

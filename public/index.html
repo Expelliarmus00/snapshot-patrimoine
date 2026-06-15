@@ -33,7 +33,7 @@
   --border-strong:#CFCFCF; /* sm-n-20 */
   --ink:#0B0B0B;           /* sm-black : texte principal */
   --ink-2:#4A4D54;         /* sm-n-60 : texte secondaire */
-  --ink-3:#8A8A8A;         /* sm-n-40 : labels / muted */
+  --ink-3:#767676;         /* sm-n-40 : labels / muted — 4.54:1 WCAG AA */
   --forest:#1D2026;        /* sm-ink : sidebar */
   --forest-2:#0B0B0B;      /* sm-black */
   --gold:#ED5847;          /* sm-coral (accent unique) */
@@ -46,7 +46,7 @@
   --pos:#4A4D54;           /* neutre (la marque n'a pas de vert) */
   --neg:#B82D1C;           /* corail foncé pour alertes */
   --muted:#4A4D54;
-  --muted-2:#8A8A8A;
+  --muted-2:#767676;
 
   --coral:#ED5847; --coral-soft:#F6ABA2; --coral-50:#E53A26;
 
@@ -237,18 +237,19 @@ input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5p
 
 .seclabel{display:none;}
 
-/* toast */
-.toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#F3F1EA; padding:12px 18px; border-radius:11px; font-size:13px; font-weight:500; box-shadow:0 12px 32px -8px rgba(28,36,32,.4); opacity:0; pointer-events:none; transition:all .3s ease; z-index:300;}
-.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+/* tables scrollables sur mobile */
+.table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
 
-/* login */
-.login-overlay{position:fixed; inset:0; background:rgba(11,11,11,.5); backdrop-filter:blur(5px); display:none; align-items:center; justify-content:center; z-index:400;}
-.login-overlay.show{display:flex;}
-.login-card{background:var(--surface); border-radius:18px; padding:30px; width:min(380px,92vw); box-shadow:0 24px 60px -16px rgba(11,11,11,.4); display:flex; flex-direction:column; gap:13px;}
-.login-card h2{font-size:19px; color:var(--ink);}
-.login-card input{border:1px solid var(--border-strong); border-radius:10px; padding:11px 13px; font-size:14px;}
-.login-card input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(237,88,71,.16);}
-.login-err{color:var(--neg); font-size:12.5px; min-height:16px;}
+/* toast avec action optionnelle (undo) */
+.toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#F3F1EA; padding:12px 18px; border-radius:11px; font-size:13px; font-weight:500; box-shadow:0 12px 32px -8px rgba(28,36,32,.4); opacity:0; pointer-events:none; transition:all .3s ease; z-index:300; display:flex; align-items:center; gap:12px;}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto;}
+.toast-undo{background:none; border:1px solid rgba(255,255,255,.3); color:#F3F1EA; border-radius:6px; padding:3px 9px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap;}
+.toast-undo:hover{background:rgba(255,255,255,.12);}
+.toast-msg{flex:1;}
+
+/* indicateur de sync dans la topbar (visible sur mobile) */
+.topbar-sync{display:none; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--ink-2);}
+.topbar-sync .sync-dot{font-size:8px;}
 
 /* panneaux */
 .panel{display:none; animation:fade .34s cubic-bezier(.22,1,.36,1);}
@@ -283,8 +284,9 @@ input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5p
   .app.nav-open .scrim{display:block; position:fixed; inset:0; background:rgba(11,11,11,.4); z-index:150;}
   .nav-toggle{display:inline-flex;}
   .kpis{grid-template-columns:1fr 1fr;}
+  .topbar-sync{display:flex;}
 }
-@media(max-width:560px){.kpis{grid-template-columns:1fr;}}
+@media(max-width:560px){.kpis{grid-template-columns:1fr;} .topbar-actions .btn span:not(.ic-svg){display:none;}}
 </style>
 </head>
 <body>
@@ -335,6 +337,7 @@ input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5p
           <h1 class="page-title" id="pageTitle">Vue d'ensemble</h1>
         </div>
       </div>
+      <div class="topbar-sync" id="topbarSync"></div>
       <div class="topbar-actions">
         <button class="btn btn-ghost" onclick="exportExcel()"><span data-icon="download"></span>Excel</button>
         <button class="btn btn-ghost" onclick="exportPDF()"><span data-icon="printer"></span>PDF</button>
@@ -356,7 +359,7 @@ input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5p
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast"><span class="toast-msg" id="toastMsg"></span></div>
 
 <script>
 /* ============================================================================
@@ -400,7 +403,9 @@ function defaultData(){
     charges:{ chargesPPE:null, fondsReno:null, tauxTheorique:5, entretienPct:1, revenuBrut:null },
     contrats:[ {id:uid(), titulaire:'Kevin', banque:'', versement:7258}, {id:uid(), titulaire:'Aurélia', banque:'', versement:3042} ],
     historique:[],
-    rendement:4
+    rendement:4,
+    rendementBien:1.5,   // % d'appréciation annuelle estimée du bien
+    tauxRenovRisk:3.5    // taux hypothétique au renouvellement (stress-test)
   };
 }
 
@@ -453,18 +458,29 @@ function save(){
   if(BOOTING) return;
   if(MODE==='server'){
     clearTimeout(saveTimer); setSync('saving');
-    saveTimer=setTimeout(async ()=>{ try{ await api('/config',{method:'PUT', body:JSON.stringify(configPayload())}); setSync('ok'); }catch(e){ setSync('error'); } }, 600);
+    saveTimer=setTimeout(()=>saveToServer(configPayload(), 1), 600);
   }else{
     try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
     setSync('local');
   }
 }
+async function saveToServer(payload, attempt){
+  try{
+    await api('/config',{method:'PUT',body:JSON.stringify(payload)});
+    setSync('ok');
+  }catch(e){
+    if(attempt < 3){ setTimeout(()=>saveToServer(payload, attempt+1), 2000*attempt); }
+    else{ setSync('error'); toast('Sauvegarde échouée (3 tentatives). Pensez à exporter vos données.'); }
+  }
+}
 
 function setSync(s){
-  const p=document.getElementById('syncPill'); if(!p) return;
-  const map={ok:['rgba(245,245,245,.85)','Synchronisé'], saving:['#F6ABA2','Enregistrement…'], error:['#ED5847','Erreur de synchro'], local:['rgba(255,255,255,.5)','Mode local']};
-  const [col,txt]=map[s]||map.local;
-  p.innerHTML=`<span style="color:${col};font-size:9px">●</span> ${txt}`;
+  const p=document.getElementById('syncPill');
+  const tb=document.getElementById('topbarSync');
+  const map={ok:['rgba(245,245,245,.85)','Synchronisé','#4A4D54'], saving:['#F6ABA2','Enregistrement…','#ED5847'], error:['#ED5847','Erreur de synchro','#B82D1C'], local:['rgba(255,255,255,.5)','Mode local','#767676']};
+  const [col,txt,tbCol]=map[s]||map.local;
+  if(p) p.innerHTML=`<span style="color:${col};font-size:9px">●</span> ${txt}`;
+  if(tb) tb.innerHTML=`<span class="sync-dot" style="color:${tbCol}">●</span>${txt}`;
   const lo=document.getElementById('logoutBtn'); if(lo) lo.style.display=(MODE==='server'&&AUTH_ON)?'':'none';
 }
 
@@ -473,6 +489,13 @@ function showLogin(){ location.href='https://dashboard.snapshotmedia.ch'; }
 function logout(){ fetch('https://dashboard.snapshotmedia.ch/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{}).then(()=>{ location.href='https://dashboard.snapshotmedia.ch'; }); }
 
 /* ====================== C. HELPERS DE FORMAT ====================== */
+
+// Échappe les caractères HTML dangereux pour une insertion sûre via innerHTML
+function esc(v){ return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Debounce : retarde l'exécution de fn de ms millisecondes (évite les re-renders sur chaque frappe)
+function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+
 const fmtCHF0=new Intl.NumberFormat('de-CH',{style:'currency',currency:'CHF',maximumFractionDigits:0});
 const fmtCHF2=new Intl.NumberFormat('de-CH',{style:'currency',currency:'CHF',minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtNum =new Intl.NumberFormat('de-CH',{maximumFractionDigits:0});
@@ -487,7 +510,18 @@ function yearsBetween(a,b){ return (new Date(b)-new Date(a))/(86400000*365.25); 
 function addMonths(iso,m){ const d=new Date(iso); d.setMonth(d.getMonth()+m); return d.toISOString().slice(0,10); }
 function badge(){ return '<span class="badge-est">à confirmer</span>'; }
 function note(tag,html,warn){ return `<div class="note${warn?' warn':''}"><span class="note-tag">${tag}</span><div>${html}</div></div>`; }
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+function toast(msg, undoFn=null){
+  const t=document.getElementById('toast'), m=document.getElementById('toastMsg');
+  m.textContent=msg;
+  // Nettoyer l'ancien bouton undo s'il existe
+  const old=t.querySelector('.toast-undo'); if(old) old.remove();
+  if(undoFn){
+    const btn=document.createElement('button'); btn.className='toast-undo'; btn.textContent='Annuler';
+    btn.onclick=()=>{ undoFn(); t.classList.remove('show'); };
+    t.appendChild(btn);
+  }
+  t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),undoFn?5000:2400);
+}
 
 /* ====================== D. CALCULS ====================== */
 function calc(){
@@ -606,8 +640,41 @@ function renderRecap(){
         </tbody></table>
         ${(ltvWarn||effortWarn)?`<div style="margin-top:14px">${note('Point d\'attention', `${ltvWarn?'LTV supérieure à 80 %. ':''}${effortWarn?'Taux d\'effort au-dessus du seuil de 33 %.':''}`, true)}</div>`:''}
       </div>
+    </div>
+
+    <h3 class="section-title">Fortune nette &amp; équité immobilière</h3>
+    <div class="grid cols-2" style="align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Projection sur ${num(s.fin.dureeAmort)} ans</h3><span class="card-note">appréciation ${pct(s.rendementBien,1)} / an</span></div>
+        <div class="chart-wrap h-md"><canvas id="chFortuneNette"></canvas></div>
+        <div class="legend">
+          <span><i style="background:var(--primary)"></i> Valeur du bien (estimée)</span>
+          <span><i style="color:var(--muted-2)" class="dash"></i> Dette résiduelle</span>
+          <span><i style="background:var(--accent)"></i> Fortune nette (équité)</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Valeur au terme (${new Date(s.meta.dateAcquisition||'').getFullYear()+num(s.fin.dureeAmort)||'—'})</h3></div>
+        <table class="data"><tbody>
+          ${(()=>{
+            const horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
+            const valFin=num(s.prix.prixTotalActe)*Math.pow(1+rb, horizon);
+            const detteFin=c.hyp; // amortissement indirect : dette constante
+            const equiteFin=valFin-detteFin;
+            const equiteAct=num(s.prix.prixTotalActe)-c.hyp;
+            return `
+          <tr><td>Valeur estimée au terme</td><td class="r num">${chf(valFin)}</td></tr>
+          <tr><td>Dette résiduelle</td><td class="r num">${chf(detteFin)}</td></tr>
+          <tr class="sub"><td>Fortune nette projetée</td><td class="r num">${chf(equiteFin)}</td></tr>
+          <tr><td>Équité actuelle (jour 1)</td><td class="r num">${chf(equiteAct)}</td></tr>
+          <tr><td>Gain d'équité sur ${horizon} ans</td><td class="r num" style="color:var(--accent)">${chf(equiteFin-equiteAct)}</td></tr>`;
+          })()}
+        </tbody></table>
+        <div style="margin-top:14px">${note('Hypothèse', `Appréciation <b>${pct(s.rendementBien,1)} / an</b> sur la valeur du bien. La dette reste constante (amortissement indirect). Modifiez le taux dans Paramètres → Hypothèses.`)}</div>
+      </div>
     </div>`;
   buildRecapDonut(c);
+  buildFortuneNetteChart(c);
 }
 
 /* ---------- E.2 CASH-FLOW ---------- */
@@ -709,7 +776,7 @@ function renderProjections(){
         <div class="card-head"><h3>Saisir une valeur de contrat</h3><span class="card-note">historique append-only</span></div>
         <div class="fields-grid">
           <div class="field"><label>Date</label><input type="date" id="hDate" value="${todayISO()}" /></div>
-          <div class="field"><label>Contrat</label><select id="hContrat">${s.contrats.map(x=>`<option value="${x.id}">${x.titulaire}${x.banque?' — '+x.banque:''}</option>`).join('')}</select></div>
+          <div class="field"><label>Contrat</label><select id="hContrat">${s.contrats.map(x=>`<option value="${esc(x.id)}">${esc(x.titulaire)}${x.banque?' — '+esc(x.banque):''}</option>`).join('')}</select></div>
           <div class="field"><label>Valeur CHF</label><input type="number" id="hValeur" placeholder="ex. 7300" min="0" step="1" /></div>
         </div>
         <button class="btn btn-primary" onclick="addHistorique()">${icon('plus')} Ajouter au suivi</button>
@@ -720,7 +787,7 @@ function renderProjections(){
         <div style="max-height:330px; overflow:auto">
         <table class="data">
           <thead><tr><th>Date</th><th>Contrat</th><th class="r">Valeur</th><th></th></tr></thead>
-          <tbody>${s.historique.length?[...s.historique].sort((a,b)=>b.date.localeCompare(a.date)).map(h=>{ const ct=s.contrats.find(x=>x.id===h.contratId); return `<tr><td class="num">${fmtDate(h.date)}</td><td>${ct?ct.titulaire:'—'}</td><td class="r num">${chf(h.valeur)}</td><td class="r"><button class="btn btn-danger btn-sm btn-icon" onclick="delHistorique('${h.id}')" title="Supprimer">${icon('x',15)}</button></td></tr>`; }).join(''):'<tr><td colspan="4" class="empty">Aucune valeur saisie pour le moment.</td></tr>'}</tbody>
+          <tbody>${s.historique.length?[...s.historique].sort((a,b)=>b.date.localeCompare(a.date)).map(h=>{ const ct=s.contrats.find(x=>x.id===h.contratId); return `<tr><td class="num">${fmtDate(h.date)}</td><td>${ct?esc(ct.titulaire):'—'}</td><td class="r num">${chf(h.valeur)}</td><td class="r"><button class="btn btn-danger btn-sm btn-icon" onclick="delHistorique('${esc(h.id)}')" title="Supprimer">${icon('x',15)}</button></td></tr>`; }).join(''):'<tr><td colspan="4" class="empty">Aucune valeur saisie pour le moment.</td></tr>'}</tbody>
         </table>
         </div>
       </div>
@@ -749,11 +816,64 @@ function renderProjections(){
           </tbody>
         </table>
         <div style="margin-top:14px">${note('Arbitrage', `L'indirect coûte <b>${chf(cmp.surcout)}</b> d'intérêts en plus, à mettre en regard de <b>l'avantage fiscal</b> (déduction des intérêts maximaux + déduction des versements 3a) et du <b>potentiel de rendement boursier</b> du capital 3a (${chf(cmp.capitalFinal)} projetés).`, true)}</div>
+        <div style="margin-top:14px">${(()=>{
+          // Estimation simplifiée de l'avantage fiscal (canton FR, taux marginal indicatif)
+          const txMarginal=0.25; // ~25% indicatif (à vérifier avec votre conseiller fiscal)
+          const econInteret=c.interetsAnnuels*txMarginal;
+          const econTroisA=c.versement3aTotal*txMarginal;
+          const valLocative=c.base*0.035*0.70; // valeur locative FR ≈ 3.5% VNP × 70%
+          const coutValLoc=valLocative*txMarginal;
+          const gainFiscalNet=econInteret+econTroisA-coutValLoc;
+          return note('Estimation fiscale FR (indicative, taux marginal ~25%)',
+            `Économie sur intérêts : <b>${chf(econInteret)}/an</b> · Économie 3a : <b>${chf(econTroisA)}/an</b><br>
+             Surcoût valeur locative imposable (~${chf(valLocative)}) : <b>−${chf(coutValLoc)}/an</b><br>
+             → <b>Avantage fiscal net estimé : ${chf(gainFiscalNet)}/an</b><br>
+             <span style="color:var(--ink-3);font-size:11px">Chiffres indicatifs. Consultez un conseiller fiscal pour votre situation précise (FR).</span>`);
+        })()}</div>
+      </div>
+    </div>
+
+    <h3 class="section-title">Scénario de renouvellement — stress-test de taux</h3>
+    <div class="grid cols-2" style="align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Si votre taux passe à… ${badge()}</h3><span class="card-note">à l'échéance 2031</span></div>
+        <div class="slider-row mb12">
+          <label>Taux hypothétique au renouvellement</label>
+          <input type="range" min="0.5" max="6" step="0.1" value="${s.tauxRenovRisk}" oninput="onTauxRenov(this.value)" />
+          <span class="slider-val" id="renovVal">${pct(s.tauxRenovRisk,1)}</span>
+        </div>
+        ${(()=>{
+          const tauxRisk=num(s.tauxRenovRisk)/100;
+          const interetsRisk=c.hyp*tauxRisk;
+          const delta=interetsRisk-c.interetsAnnuels;
+          const detentionRisk=interetsRisk+c.amort+c.chargesPPE+c.fondsReno;
+          return `<table class="data"><tbody>
+            <tr><td>Intérêts annuels actuels (${pct(c.tauxMoyen,2)})</td><td class="r num">${chf(c.interetsAnnuels)}</td></tr>
+            <tr><td>Intérêts annuels projetés (${pct(s.tauxRenovRisk,1)})</td><td class="r num">${chf(interetsRisk)}</td></tr>
+            <tr><td>Delta annuel</td><td class="r num" style="color:${delta>0?'var(--neg)':'var(--accent)'}">${delta>=0?'+':''}${chf(delta)}</td></tr>
+            <tr><td>Delta mensuel</td><td class="r num" style="color:${delta>0?'var(--neg)':'var(--accent)'}">${delta>=0?'+':''}${chf(delta/12)}</td></tr>
+            <tr class="sub"><td>Coût de détention mensuel projeté</td><td class="r num">${chf(detentionRisk/12)}</td></tr>
+          </tbody></table>`;
+        })()}
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Tableau de scénarios</h3></div>
+        <table class="data">
+          <thead><tr><th>Scénario</th><th class="r">Taux</th><th class="r">Intérêts/an</th><th class="r">Mensuel total</th><th class="r">Delta/mois</th></tr></thead>
+          <tbody>
+            ${[['Optimiste','0.5%',0.005],['Historique bas','1.0%',0.01],['Taux actuel',pct(c.tauxMoyen,2),c.tauxMoyen/100],['Neutre','2.5%',0.025],['Prudent','3.5%',0.035],['Pessimiste','5.0%',0.05]].map(([label,tauxStr,tx])=>{
+              const inter=c.hyp*tx, det=(inter+c.amort+c.chargesPPE+c.fondsReno)/12, dlt=(inter-c.interetsAnnuels)/12;
+              const isCurrent=Math.abs(tx-c.tauxMoyen/100)<0.0001;
+              return `<tr${isCurrent?' style="font-weight:700"':''}><td>${label}</td><td class="r">${tauxStr}</td><td class="r num">${chf(inter)}</td><td class="r num">${chf(det)}</td><td class="r num" style="color:${dlt>0?'var(--neg)':'var(--accent)'}">${dlt>=0?'+':''}${chf(dlt)}</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>
       </div>
     </div>`;
   buildProjChart(); buildCompareChart();
 }
 function onRendement(v){ state.rendement=num(v); document.getElementById('rendVal').textContent=pct(state.rendement,1); save(); renderProjections(); }
+function onTauxRenov(v){ state.tauxRenovRisk=num(v); document.getElementById('renovVal').textContent=pct(state.tauxRenovRisk,1); save(); renderProjections(); }
 async function addHistorique(){
   const date=document.getElementById('hDate').value||todayISO();
   const contratId=document.getElementById('hContrat').value;
@@ -767,10 +887,17 @@ async function addHistorique(){
   renderProjections(); toast('Valeur ajoutée à l\'historique.');
 }
 async function delHistorique(id){
+  const snap=state.historique.find(h=>h.id===id);
   if(MODE==='server'){ setSync('saving'); try{ await api('/historique/'+id,{method:'DELETE'}); setSync('ok'); }catch(e){ setSync('error'); toast('Échec de la suppression serveur.'); return; } }
   state.historique=state.historique.filter(h=>h.id!==id);
   if(MODE!=='server') save();
-  renderProjections(); toast('Saisie supprimée.');
+  renderProjections();
+  toast('Saisie supprimée.', snap ? async ()=>{
+    if(MODE==='server'){ setSync('saving'); try{ await api('/historique',{method:'POST',body:JSON.stringify(snap)}); setSync('ok'); }catch(e){ setSync('error'); toast('Échec de la restauration.'); return; } }
+    state.historique.push(snap);
+    if(MODE!=='server') save();
+    renderProjections(); toast('Saisie restaurée.');
+  } : null);
 }
 
 /* ====================== F. GRAPHIQUES ====================== */
@@ -820,6 +947,28 @@ function buildProjChart(){
       plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${chf(ctx.parsed.y)}`}}},
       scales:{x:{type:'linear', min:baseYear, max:baseYear+ser.horizon, border:{display:false}, grid:{color:GRID}, ticks:{stepSize:1, callback:v=>v}}, y:{border:{display:false}, grid:{color:GRID}, ticks:{callback:v=>fmtNum.format(v)}, beginAtZero:true}}}});
 }
+function buildFortuneNetteChart(c){
+  destroyChart('fortuneNette');
+  const s=state, horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
+  const baseYear=new Date(s.meta.dateAcquisition).getFullYear()||2026;
+  const labels=[], valeurs=[], dettes=[], equites=[];
+  for(let y=0;y<=horizon;y++){
+    labels.push(baseYear+y);
+    const v=num(s.prix.prixTotalActe)*Math.pow(1+rb,y);
+    const d=c.hyp; // indirect : dette constante
+    valeurs.push(v); dettes.push(d); equites.push(v-d);
+  }
+  charts.fortuneNette=new Chart(document.getElementById('chFortuneNette'),{type:'line',
+    data:{labels, datasets:[
+      {label:'Valeur du bien',data:valeurs,borderColor:COL.ink,backgroundColor:'rgba(29,32,38,.06)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true},
+      {label:'Dette résiduelle',data:dettes,borderColor:COL.n40,borderDash:[6,5],borderWidth:2,pointRadius:0,fill:false},
+      {label:'Fortune nette',data:equites,borderColor:COL.coral,backgroundColor:'rgba(237,88,71,.10)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${chf(ctx.parsed.y)}`}}},
+      scales:{x:{border:{display:false},grid:{color:GRID}},y:{border:{display:false},grid:{color:GRID},ticks:{callback:v=>fmtNum.format(v)},beginAtZero:true}}}});
+}
+
 function buildCompareChart(){
   destroyChart('compare'); const s=state, cmp=compareSeries(s.rendement);
   const baseYear=new Date(s.meta.dateAcquisition).getFullYear()||2026;
@@ -838,22 +987,32 @@ function buildCompareChart(){
 /* ====================== G. PARAMÈTRES ====================== */
 function fieldNum(path,label,opts={}){
   const v=getPath(path);
-  return `<div class="field"><label>${label}${opts.badge?badge():''}</label><input type="number" step="${opts.step||'1'}" value="${v===null||v===undefined?'':v}" placeholder="${opts.ph||''}" oninput="setPath('${path}', this.value===''?null:parseFloat(this.value)); recalcLight()" />${opts.hint?`<span class="hint">${opts.hint}</span>`:''}</div>`;
+  return `<div class="field"><label>${label}${opts.badge?badge():''}</label><input type="number" step="${esc(opts.step||'1')}" value="${v===null||v===undefined?'':v}" placeholder="${esc(opts.ph||'')}" oninput="setPath('${path}', this.value===''?null:parseFloat(this.value)); recalcLight()" />${opts.hint?`<span class="hint">${esc(opts.hint)}</span>`:''}</div>`;
 }
 function fieldText(path,label,opts={}){
   const v=getPath(path)??'';
-  return `<div class="field"><label>${label}</label><input type="${opts.type||'text'}" value="${v}" oninput="setPath('${path}', this.value); recalcLight()" />${opts.hint?`<span class="hint">${opts.hint}</span>`:''}</div>`;
+  return `<div class="field"><label>${esc(label)}</label><input type="${esc(opts.type||'text')}" value="${esc(v)}" oninput="setPath('${path}', this.value); recalcLight()" />${opts.hint?`<span class="hint">${esc(opts.hint)}</span>`:''}</div>`;
 }
 function getPath(p){ return p.split('.').reduce((o,k)=>o&&o[k],state); }
 function setPath(p,val){ const ks=p.split('.'); let o=state; for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=val; save(); }
-function recalcLight(){ renderHeader(); const a=document.querySelector('.nav-item.active'); renderByTab(a?a.dataset.tab:'parametres'); save(); }
+function recalcLight(){
+  renderHeader();
+  const a=document.querySelector('.nav-item.active'), tab=a?a.dataset.tab:'parametres';
+  // Ne pas reconstruire le formulaire Paramètres pendant la saisie → évite la perte de focus
+  if(tab!=='parametres') renderByTab(tab);
+  save();
+}
 
 function renderParametres(){
   const s=state;
   document.getElementById('parametresBody').innerHTML=`
     <div class="flex between center wrap gap12" style="margin-bottom:6px">
-      <p class="muted small" style="max-width:660px; margin:0">Toutes les valeurs sont éditables ; chaque modification recalcule et redessine immédiatement KPI, tableaux et graphiques. Sauvegarde automatique.</p>
-      <button class="btn btn-danger" onclick="resetAll()">${icon('reset')} Réinitialiser</button>
+      <p class="muted small" style="max-width:540px; margin:0">Toutes les valeurs sont éditables ; chaque modification recalcule et redessine immédiatement KPI, tableaux et graphiques. Sauvegarde automatique.</p>
+      <div class="flex gap8 wrap">
+        <button class="btn btn-ghost btn-sm" onclick="exportJSON()">${icon('download',15)} Exporter JSON</button>
+        <button class="btn btn-ghost btn-sm" onclick="importJSON()">${icon('plus',15)} Importer JSON</button>
+        <button class="btn btn-danger btn-sm" onclick="resetAll()">${icon('reset',15)} Réinitialiser</button>
+      </div>
     </div>
 
     <h3 class="section-title">Bien &amp; propriétaires</h3>
@@ -900,16 +1059,16 @@ function renderParametres(){
 
     <h3 class="section-title">Tranches hypothécaires ${badge()}</h3>
     <div class="card">
-      <table class="data edit-table">
+      <div class="table-scroll"><table class="data edit-table">
         <thead><tr><th>Montant</th><th>Taux %</th><th>Type</th><th>Début</th><th>Échéance</th><th></th></tr></thead>
         <tbody>${s.tranches.map(t=>`<tr>
-          <td><input type="number" value="${t.montant}" oninput="updTranche('${t.id}','montant',this.value)" /></td>
-          <td><input type="number" step="0.01" value="${t.taux}" oninput="updTranche('${t.id}','taux',this.value)" /></td>
-          <td><select onchange="updTranche('${t.id}','type',this.value)"><option ${t.type==='Fixe'?'selected':''}>Fixe</option><option ${t.type==='SARON'?'selected':''}>SARON</option></select></td>
-          <td><input type="date" value="${t.debut}" oninput="updTranche('${t.id}','debut',this.value)" /></td>
-          <td><input type="date" value="${t.echeance}" oninput="updTranche('${t.id}','echeance',this.value)" /></td>
-          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delTranche('${t.id}')">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
-      </table>
+          <td><input type="number" value="${num(t.montant)}" oninput="updTranche('${esc(t.id)}','montant',this.value)" /></td>
+          <td><input type="number" step="0.01" value="${num(t.taux)}" oninput="updTranche('${esc(t.id)}','taux',this.value)" /></td>
+          <td><select onchange="updTranche('${esc(t.id)}','type',this.value)"><option ${t.type==='Fixe'?'selected':''}>Fixe</option><option ${t.type==='SARON'?'selected':''}>SARON</option></select></td>
+          <td><input type="date" value="${esc(t.debut)}" oninput="updTranche('${esc(t.id)}','debut',this.value)" /></td>
+          <td><input type="date" value="${esc(t.echeance)}" oninput="updTranche('${esc(t.id)}','echeance',this.value)" /></td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delTranche('${esc(t.id)}')">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
+      </table></div>
       <button class="btn btn-soft btn-sm mt8" onclick="addTranche()">${icon('plus',15)} Ajouter une tranche</button>
     </div>
 
@@ -920,27 +1079,40 @@ function renderParametres(){
       ${fieldNum('charges.tauxTheorique','Taux théorique (tenue des charges) %',{step:'0.1'})}
       ${fieldNum('charges.entretienPct','Entretien théorique (% de la base) %',{step:'0.1'})}
       ${fieldNum('charges.revenuBrut','Revenu brut annuel du ménage',{ph:'optionnel'})}
+      ${fieldNum('rendementBien','Appréciation annuelle estimée du bien %',{step:'0.1',hint:'Utilisé pour le calcul de la fortune nette'})}
+      ${fieldNum('tauxRenovRisk','Taux hypothétique au renouvellement %',{step:'0.1',hint:'Scénario stress-test pour 2031'})}
     </div></div>
 
     <h3 class="section-title">Contrats 3a (amortissement indirect)</h3>
     <div class="card">
-      <table class="data edit-table">
+      <div class="table-scroll"><table class="data edit-table">
         <thead><tr><th>Titulaire</th><th>Banque</th><th>Versement annuel</th><th></th></tr></thead>
         <tbody>${s.contrats.map(c=>`<tr>
-          <td><input value="${c.titulaire}" oninput="updContrat('${c.id}','titulaire',this.value)" /></td>
-          <td><input value="${c.banque||''}" placeholder="banque / fonds" oninput="updContrat('${c.id}','banque',this.value)" /></td>
-          <td><input type="number" value="${c.versement}" oninput="updContrat('${c.id}','versement',this.value)" /></td>
-          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delContrat('${c.id}')">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
-      </table>
+          <td><input value="${esc(c.titulaire)}" oninput="updContrat('${esc(c.id)}','titulaire',this.value)" /></td>
+          <td><input value="${esc(c.banque||'')}" placeholder="banque / fonds" oninput="updContrat('${esc(c.id)}','banque',this.value)" /></td>
+          <td><input type="number" value="${num(c.versement)}" oninput="updContrat('${esc(c.id)}','versement',this.value)" /></td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delContrat('${esc(c.id)}')">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
+      </table></div>
       <button class="btn btn-soft btn-sm mt8" onclick="addContrat()">${icon('plus',15)} Ajouter un contrat</button>
     </div>`;
 }
 function addTranche(){ state.tranches.push({id:uid(),montant:0,taux:1.5,type:'Fixe',debut:todayISO(),echeance:addMonths(todayISO(),60)}); save(); renderAll(); }
-function delTranche(id){ if(state.tranches.length<=1){toast('Au moins une tranche est requise.');return;} state.tranches=state.tranches.filter(t=>t.id!==id); save(); renderAll(); }
-function updTranche(id,k,v){ const t=state.tranches.find(x=>x.id===id); if(!t)return; t[k]=(k==='montant'||k==='taux')?num(v):v; save(); renderRecapDeps(); }
+function delTranche(id){
+  if(state.tranches.length<=1){toast('Au moins une tranche est requise.');return;}
+  const snap=state.tranches.find(t=>t.id===id);
+  state.tranches=state.tranches.filter(t=>t.id!==id); save(); renderAll();
+  toast('Tranche supprimée.', snap?()=>{ state.tranches.push(snap); save(); renderAll(); }:null);
+}
+const renderRecapDepsDebounced=debounce(renderRecapDeps,350);
+function updTranche(id,k,v){ const t=state.tranches.find(x=>x.id===id); if(!t)return; t[k]=(k==='montant'||k==='taux')?num(v):v; save(); renderRecapDepsDebounced(); }
 function addContrat(){ state.contrats.push({id:uid(),titulaire:'Nouveau',banque:'',versement:0}); save(); renderAll(); }
-function delContrat(id){ if(state.contrats.length<=1){toast('Au moins un contrat est requis.');return;} state.contrats=state.contrats.filter(c=>c.id!==id); save(); renderAll(); }
-function updContrat(id,k,v){ const c=state.contrats.find(x=>x.id===id); if(!c)return; c[k]=(k==='versement')?num(v):v; save(); renderRecapDeps(); }
+function delContrat(id){
+  if(state.contrats.length<=1){toast('Au moins un contrat est requis.');return;}
+  const snap=state.contrats.find(c=>c.id===id);
+  state.contrats=state.contrats.filter(c=>c.id!==id); save(); renderAll();
+  toast('Contrat supprimé.', snap?()=>{ state.contrats.push(snap); save(); renderAll(); }:null);
+}
+function updContrat(id,k,v){ const c=state.contrats.find(x=>x.id===id); if(!c)return; c[k]=(k==='versement')?num(v):v; save(); renderRecapDepsDebounced(); }
 function renderRecapDeps(){ renderHeader(); renderRecap(); renderCashflow(); renderCalendrier(); renderProjections(); save(); }
 
 async function resetAll(){
@@ -985,6 +1157,49 @@ function exportExcel(){
 function exportPDF(){ window.print(); }
 window.addEventListener('beforeprint', ()=>{ Object.values(charts).forEach(ch=>{ try{ch.resize();}catch(e){} }); });
 window.addEventListener('afterprint', ()=>{ Object.values(charts).forEach(ch=>{ try{ch.resize();}catch(e){} }); });
+
+/* ====================== EXPORT / IMPORT JSON ====================== */
+function exportJSON(){
+  const payload=JSON.stringify({...state, _exportDate:todayISO()}, null, 2);
+  const a=document.createElement('a');
+  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(payload);
+  a.download=`patrimoine-${todayISO()}.json`;
+  a.click();
+  toast('Données exportées en JSON.');
+}
+function importJSON(){
+  const input=document.createElement('input'); input.type='file'; input.accept='.json,application/json';
+  input.onchange=async e=>{
+    const file=e.target.files[0]; if(!file) return;
+    try{
+      const text=await file.text();
+      const parsed=JSON.parse(text);
+      delete parsed._exportDate; delete parsed._auth; delete parsed._user;
+      if(!confirm('Remplacer toutes vos données par celles du fichier importé ?')) return;
+      if(MODE==='server'){
+        // Supprimer l'historique existant
+        setSync('saving');
+        for(const h of [...state.historique]){ try{ await api('/historique/'+h.id,{method:'DELETE'}); }catch(e){} }
+        // Réimporter l'historique du fichier
+        const newHist=Array.isArray(parsed.historique)?parsed.historique:[];
+        for(const h of newHist){ try{ await api('/historique',{method:'POST',body:JSON.stringify(h)}); }catch(e){} }
+        const body={...parsed}; delete body.historique;
+        await api('/config',{method:'PUT',body:JSON.stringify(body)});
+        setSync('ok');
+      }
+      state=deepMerge(defaultData(), parsed);
+      if(MODE!=='server') save();
+      renderAll(); switchTab('recap'); toast('Import réussi.');
+    }catch(err){ toast('Erreur lors de l\'import : fichier invalide.'); }
+  };
+  input.click();
+}
+
+/* Avertissement si une sauvegarde est en cours lors de la fermeture */
+window.addEventListener('beforeunload', e=>{
+  const p=document.getElementById('syncPill');
+  if(p && p.textContent.includes('Enregistrement')){ e.preventDefault(); }
+});
 
 /* ====================== INIT ====================== */
 boot();

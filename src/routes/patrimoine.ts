@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
 import { z } from 'zod';
 import { prisma } from '../db/client.js';
+import { config } from '../config.js';
 
 const CONFIG_ID = 1;
 
@@ -23,15 +27,6 @@ async function getHistorique() {
   });
 }
 
-/**
- * API du dashboard patrimoine.
- * Montée sous /api/ et protégée par le middleware d'auth.
- *
- *   GET    /state           → config + historique 3a
- *   PUT    /config          → sauvegarde de la configuration (auto)
- *   POST   /historique      → ajout d'une valeur 3a (append-only)
- *   DELETE /historique/:id  → suppression explicite
- */
 export const patrimoineRoutes: FastifyPluginAsync = async (app) => {
   app.get('/state', async (request) => {
     const [cfg, historique] = await Promise.all([getConfig(), getHistorique()]);
@@ -61,7 +56,6 @@ export const patrimoineRoutes: FastifyPluginAsync = async (app) => {
       await prisma.historique.create({ data: { id, date, contratId, valeur } });
       return reply.code(201).send({ id, date, contratId, valeur });
     } catch {
-      // Clé primaire déjà présente → jamais d'écrasement (append-only).
       return reply.code(409).send({ error: 'identifiant déjà présent' });
     }
   });
@@ -70,5 +64,20 @@ export const patrimoineRoutes: FastifyPluginAsync = async (app) => {
     const { id } = request.params as { id: string };
     await prisma.historique.deleteMany({ where: { id } });
     return reply.code(204).send();
+  });
+
+  // Téléchargement de la base de données (backup manuel, authentifié)
+  app.get('/backup', async (request, reply) => {
+    const dbUrl = config.DATABASE_URL.replace(/^file:/, '');
+    const dbPath = path.resolve(process.cwd(), dbUrl);
+    try {
+      await stat(dbPath);
+    } catch {
+      return reply.code(404).send({ error: 'database file not found' });
+    }
+    const filename = `patrimoine-backup-${new Date().toISOString().slice(0, 10)}.db`;
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+    reply.header('Content-Type', 'application/octet-stream');
+    return reply.send(createReadStream(dbPath));
   });
 };

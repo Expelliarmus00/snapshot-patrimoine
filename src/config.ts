@@ -19,6 +19,9 @@ const ConfigSchema = z.object({
   DASHBOARD_URL: z.string().url().default('https://dashboard.snapshotmedia.ch'),
 
   DATABASE_URL: z.string().min(1).default('file:./data/patrimoine.db'),
+
+  // Liste blanche d'emails autorisés (séparés par des virgules). Si vide, tout utilisateur validé est accepté.
+  ALLOWED_EMAILS: z.string().optional(),
 });
 
 const parsed = ConfigSchema.safeParse(process.env);
