@@ -1,471 +1,992 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr-CH">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Patrimoine immobilier — Snapshot Media</title>
-<style>
-@font-face{font-family:'Switzer';src:url('fonts/Switzer-Regular.otf') format('opentype');font-weight:400;font-display:swap;}
-@font-face{font-family:'Switzer';src:url('fonts/Switzer-Medium.otf') format('opentype');font-weight:500;font-display:swap;}
-@font-face{font-family:'Switzer';src:url('fonts/Switzer-Semibold.otf') format('opentype');font-weight:600;font-display:swap;}
-@font-face{font-family:'Switzer';src:url('fonts/Switzer-Bold.otf') format('opentype');font-weight:700;font-display:swap;}
-@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Regular.otf') format('opentype');font-weight:400;font-display:swap;}
-@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Medium.otf') format('opentype');font-weight:500;font-display:swap;}
-@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Bold.otf') format('opentype');font-weight:700;font-display:swap;}
+<title>Patrimoine — Auboranges (FR)</title>
 
+<!-- ============ LIBRAIRIES (self-hosted — CSP stricte) ============ -->
+<script src="vendor/chart.umd.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+
+<style>
+/* ============================================================
+   POLICES (Switzer + Satoshi — auto-hébergées)
+   ============================================================ */
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Regular.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap;}
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Medium.otf') format('opentype');font-weight:500;font-style:normal;font-display:swap;}
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Semibold.otf') format('opentype');font-weight:600;font-style:normal;font-display:swap;}
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Bold.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap;}
+@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Regular.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap;}
+@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Medium.otf') format('opentype');font-weight:500;font-style:normal;font-display:swap;}
+@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Bold.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap;}
+
+/* ============================================================
+   TOKENS
+   ============================================================ */
 :root{
-  --canvas:#ECECEC; --surface:#FFFFFF; --surface-2:#F5F5F5;
-  --border:#EAEAEA; --border-strong:#CFCFCF;
-  --ink:#0B0B0B; --ink-2:#4A4D54; --ink-3:#8A8A8A;
-  --forest:#1D2026; --coral:#ED5847; --coral-50:#E53A26; --coral-deep:#B82D1C; --coral-soft:#F6ABA2;
-  --green:#1A7A4A; --green-bg:#EAFAF1; --red-bg:#FDECE9;
+  /* Snapshot Media — palette de marque (corail unique + neutres) */
+  --canvas:#ECECEC;        /* off-white creusé pour faire ressortir les cartes blanches */
+  --surface:#FFFFFF;
+  --surface-2:#F5F5F5;     /* sm-off-white : fills doux, hover */
+  --border:#EAEAEA;        /* sm-n-10 */
+  --border-strong:#CFCFCF; /* sm-n-20 */
+  --ink:#0B0B0B;           /* sm-black : texte principal */
+  --ink-2:#4A4D54;         /* sm-n-60 : texte secondaire */
+  --ink-3:#8A8A8A;         /* sm-n-40 : labels / muted */
+  --forest:#1D2026;        /* sm-ink : sidebar */
+  --forest-2:#0B0B0B;      /* sm-black */
+  --gold:#ED5847;          /* sm-coral (accent unique) */
+  --gold-deep:#B82D1C;     /* sm-coral-40 : corail lisible sur blanc */
+
+  /* alias structurels (neutres) + voix corail */
+  --primary:#1D2026;       /* structurel sombre : hypothèque, intérêts */
+  --primary-2:#4A4D54;     /* neutre moyen : LPP */
+  --accent:#ED5847;        /* corail : 3a, amortissement, actions */
+  --pos:#4A4D54;           /* neutre (la marque n'a pas de vert) */
+  --neg:#B82D1C;           /* corail foncé pour alertes */
+  --muted:#4A4D54;
+  --muted-2:#8A8A8A;
+
+  --coral:#ED5847; --coral-soft:#F6ABA2; --coral-50:#E53A26;
+
   --font-display:'Switzer',-apple-system,sans-serif;
   --font-body:'Satoshi',-apple-system,sans-serif;
-  --sh:0 1px 2px rgba(11,11,11,.05),0 6px 18px rgba(11,11,11,.06);
+
+  --r-sm:8px; --r-md:14px; --r-lg:20px; --r-xl:24px;
+  --sh:0 1px 2px rgba(11,11,11,.05), 0 6px 18px rgba(11,11,11,.06);
 }
 *{box-sizing:border-box;}
-html,body{margin:0;min-height:100%;}
-body{background:var(--canvas);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;}
-h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:600;letter-spacing:-.02em;}
-button{font-family:inherit;cursor:pointer;}
-input,select,textarea{font-family:inherit;}
-.ic-svg{width:18px;height:18px;flex:none;}
-.hidden{display:none!important;}
+html,body{margin:0; height:100%;}
+body{
+  background:var(--canvas); color:var(--ink);
+  font-family:var(--font-body); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+h1,h2,h3,h4{margin:0; font-family:var(--font-display); font-weight:600; letter-spacing:-.015em;}
+button{font-family:inherit; cursor:pointer;}
+input,select{font-family:inherit;}
+.num{font-variant-numeric:tabular-nums;}
+::selection{background:rgba(196,154,86,.28);}
 
-/* topbar */
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px clamp(20px,4vw,48px);border-bottom:1px solid var(--border);background:var(--canvas);position:sticky;top:0;z-index:10;}
-.brand{display:flex;align-items:center;gap:13px;text-decoration:none;color:inherit;}
-.brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(150deg,#2A2E36,#1D2026);border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;color:var(--coral);}
-.brand-name{font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--ink);line-height:1;}
-.brand-sub{font-size:10.5px;color:var(--ink-3);margin-top:3px;letter-spacing:.06em;text-transform:uppercase;}
-.topbar-right{display:flex;align-items:center;gap:10px;}
-.user-email{font-size:13px;font-weight:600;color:var(--ink-2);}
-.btn-sm{display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap;}
-.btn-sm:hover{background:var(--surface-2);}
-.btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--coral);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;transition:background .15s;}
+/* ============================================================
+   SHELL : sidebar + main
+   ============================================================ */
+.app{display:flex; min-height:100vh;}
+.scrim{display:none;}
+
+.sidebar{
+  width:266px; flex:none; background:var(--forest); color:#D7DCD4;
+  display:flex; flex-direction:column; padding:22px 16px 18px;
+  position:sticky; top:0; height:100vh;
+}
+.brand{display:flex; align-items:center; gap:12px; padding:4px 8px 20px;}
+.brand-mark{
+  width:36px; height:36px; border-radius:10px; flex:none;
+  background:linear-gradient(150deg,#2A2E36,#1D2026); border:1px solid rgba(255,255,255,.12);
+  display:grid; place-items:center; color:var(--gold);
+}
+.brand-name{font-family:var(--font-display); font-weight:600; font-size:15.5px; color:#fff; line-height:1;}
+.brand-sub{font-size:11px; color:rgba(255,255,255,.5); margin-top:4px; letter-spacing:.04em;}
+
+.property-card{
+  background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.10);
+  border-radius:14px; padding:15px 15px 14px; margin-bottom:20px;
+}
+.prop-label{font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,.42);}
+.prop-name{font-size:13.5px; font-weight:600; color:#EEF0EB; margin-top:8px; line-height:1.32;}
+.prop-place{font-size:12px; color:rgba(255,255,255,.52); margin-top:3px;}
+.prop-value{font-family:var(--font-display); font-weight:600; font-size:19px; color:#fff; margin-top:11px; font-variant-numeric:tabular-nums; letter-spacing:-.01em;}
+.prop-owners{font-size:11.5px; color:rgba(255,255,255,.48); margin-top:9px; padding-top:9px; border-top:1px solid rgba(255,255,255,.09);}
+
+.nav{display:flex; flex-direction:column; gap:2px;}
+.nav-item{
+  display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  padding:10px 12px; border:none; background:none; border-radius:10px;
+  color:rgba(255,255,255,.64); font-size:13.5px; font-weight:600; letter-spacing:.005em;
+  transition:background .16s ease, color .16s ease;
+}
+.nav-item:hover{background:rgba(255,255,255,.06); color:#fff;}
+.nav-item.active{background:rgba(255,255,255,.10); color:#fff;}
+.nav-item .ic-svg{width:18px; height:18px; opacity:.8; flex:none;}
+.nav-item.active .ic-svg{color:var(--gold); opacity:1;}
+
+.sidebar-foot{margin-top:auto; padding-top:16px; border-top:1px solid rgba(255,255,255,.09); display:flex; flex-direction:column; gap:11px;}
+.sync{display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:rgba(255,255,255,.6);}
+.logout-btn{
+  display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+  background:rgba(255,255,255,.06); color:rgba(255,255,255,.8); border:1px solid rgba(255,255,255,.12);
+  border-radius:9px; padding:7px 11px; font-size:12px; font-weight:600;
+}
+.logout-btn:hover{background:rgba(255,255,255,.12); color:#fff;}
+
+.main{flex:1; min-width:0; display:flex; flex-direction:column; height:100vh; overflow:hidden;}
+
+.topbar{
+  flex:none; display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:18px clamp(20px,3vw,42px); border-bottom:1px solid var(--border); background:var(--canvas);
+}
+.topbar-left{display:flex; align-items:center; gap:14px;}
+.crumb{font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3);}
+.page-title{font-size:23px; color:var(--ink); margin-top:4px;}
+.topbar-actions{display:flex; gap:9px;}
+.nav-toggle{display:none; background:var(--surface); border:1px solid var(--border-strong); color:var(--ink); border-radius:10px; width:40px; height:40px; align-items:center; justify-content:center;}
+
+.content{flex:1; overflow-y:auto; padding:28px clamp(20px,3vw,42px) 64px; scroll-behavior:smooth;}
+
+/* ============================================================
+   COMPOSANTS
+   ============================================================ */
+.grid{display:grid; gap:18px;}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+.cols-2{grid-template-columns:1fr 1fr;}
+.cols-3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:1080px){.cols-2,.cols-3{grid-template-columns:1fr;}}
+
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:22px 24px; box-shadow:var(--sh);}
+.card.pad-lg{padding:26px;}
+.card-head{display:flex; align-items:baseline; justify-content:space-between; gap:14px; margin-bottom:18px;}
+.card-head h3{font-size:16px; color:var(--ink);}
+.card-note{font-size:12px; font-weight:500; color:var(--ink-3);}
+
+.kpi{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:20px 20px 18px; box-shadow:var(--sh); transition:transform .16s ease, border-color .16s ease;}
+.kpi:hover{transform:translateY(-2px); border-color:var(--border-strong);}
+.kpi-label{font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);}
+.kpi-value{font-family:var(--font-display); font-weight:600; font-size:29px; letter-spacing:-.022em; color:var(--ink); margin-top:13px; font-variant-numeric:tabular-nums; line-height:1;}
+.kpi-sub{font-size:12.5px; font-weight:500; color:var(--ink-2); margin-top:9px; font-variant-numeric:tabular-nums;}
+.kpi.ink .kpi-value{color:var(--primary);}
+.kpi.accent .kpi-value{color:var(--gold-deep);}
+.kpi.pos .kpi-value{color:var(--pos);}
+
+/* tables */
+table.data{width:100%; border-collapse:collapse; font-size:13.5px; font-weight:500;}
+table.data th{text-align:left; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); padding:0 12px 11px; border-bottom:1px solid var(--border);}
+table.data td{padding:11px 12px; border-bottom:1px solid var(--border); color:var(--ink); vertical-align:middle;}
+table.data tr:last-child td{border-bottom:none;}
+table.data td.r,table.data th.r{text-align:right; font-variant-numeric:tabular-nums;}
+table.data tr.total td{font-weight:700; border-top:1.5px solid var(--border-strong); border-bottom:none; color:var(--ink);}
+table.data tr.sub td{font-weight:600; color:var(--primary);}
+table.data tbody tr:hover td{background:var(--surface-2);}
+table.data tr.total:hover td,table.data tr.sub:hover td{background:transparent;}
+.dot{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:9px; vertical-align:baseline;}
+
+/* badge "à confirmer" — point doré, pas d'emoji */
+.badge-est{display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--gold-deep); margin-left:8px; white-space:nowrap;}
+.badge-est::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--gold); flex:none;}
+
+/* pills */
+.pill{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em; border-radius:7px; padding:4px 9px;}
+.pill.ok{background:var(--surface-2); color:var(--ink); border:1px solid var(--border-strong);}
+.pill.warn{background:#FEF1EF; color:var(--gold-deep);}
+
+/* notes éditoriales (ex-callouts, sans emoji ni boîte à accent) */
+.note{background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:16px 18px; font-size:13px; line-height:1.62; color:var(--ink-2);}
+.note .note-tag{display:block; font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin-bottom:7px;}
+.note b{color:var(--ink); font-weight:700;}
+.note.warn{background:#FEF6F4; border-color:var(--coral-soft);}
+.note.warn .note-tag{color:var(--gold-deep);}
+
+/* champs */
+.field{display:flex; flex-direction:column; gap:6px; margin-bottom:15px;}
+.field label{font-size:11.5px; font-weight:600; color:var(--ink-2); display:flex; align-items:center;}
+.field input,.field select{border:1px solid var(--border-strong); border-radius:10px; padding:9px 12px; font-size:13.5px; font-weight:500; color:var(--ink); background:var(--surface); font-variant-numeric:tabular-nums; transition:border-color .15s, box-shadow .15s;}
+.field input:focus,.field select:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(237,88,71,.16);}
+.field .hint{font-size:11px; color:var(--ink-3);}
+.fields-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:0 20px;}
+.edit-table input,.edit-table select{width:100%; border:1px solid var(--border); border-radius:8px; padding:7px 8px; font-size:13px; background:var(--surface);}
+.edit-table input:focus,.edit-table select:focus{outline:none; border-color:var(--accent);}
+.edit-table td{padding:6px 6px;}
+
+/* boutons */
+.btn{display:inline-flex; align-items:center; gap:7px; border:1px solid transparent; border-radius:10px; padding:9px 15px; font-size:13px; font-weight:600; letter-spacing:.005em; transition:transform .12s ease, background .15s ease, border-color .15s ease, color .15s ease;}
+.btn:active{transform:scale(.975);}
+.btn-primary{background:var(--accent); color:#fff;}
 .btn-primary:hover{background:var(--coral-50);}
-.btn-primary:disabled{opacity:.6;cursor:default;}
-.btn-danger{background:var(--coral-deep);color:#fff;border:none;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;}
-.btn-danger:hover{opacity:.85;}
+.btn-ghost{background:var(--surface); color:var(--ink); border-color:var(--border-strong);}
+.btn-ghost:hover{background:var(--surface-2); border-color:var(--ink-3);}
+.btn-soft{background:var(--surface-2); color:var(--ink); border-color:var(--border-strong);}
+.btn-soft:hover{background:#EFEBE0;}
+.btn-danger{background:transparent; color:var(--neg); border-color:var(--border);}
+.btn-danger:hover{background:rgba(176,83,58,.08); border-color:rgba(176,83,58,.32);}
+.btn-sm{padding:6px 10px; font-size:12px; border-radius:8px; gap:5px;}
+.ic-svg{width:16px; height:16px; flex:none;}
+.btn-icon{padding:6px; width:30px; height:30px; justify-content:center;}
 
-/* layout */
-.wrap{max-width:1200px;margin:0 auto;padding:40px clamp(20px,4vw,48px) 80px;}
-.page-header{margin-bottom:32px;}
-.page-kicker{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);}
-.page-title{font-size:28px;margin-top:6px;}
-.page-lead{font-size:14px;color:var(--ink-2);margin-top:8px;}
+/* slider */
+.slider-row{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+.slider-row > label{font-size:12px; font-weight:600; color:var(--ink-2);}
+input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5px;}
+.slider-val{font-family:var(--font-display); font-weight:600; font-size:23px; color:var(--accent); font-variant-numeric:tabular-nums; min-width:72px;}
 
-.section-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
-.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+/* légende */
+.legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12px; font-weight:500; color:var(--ink-2); margin-top:14px;}
+.legend span{display:inline-flex; align-items:center; gap:8px;}
+.legend i{width:16px; height:3px; border-radius:2px; display:inline-block;}
+.legend i.dash{background:repeating-linear-gradient(90deg,currentColor 0 5px,transparent 5px 9px); height:2px;}
 
-/* cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;box-shadow:var(--sh);}
-.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;}
-.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
-.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
-@media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}}
-@media(min-width:600px) and (max-width:900px){.grid-3{grid-template-columns:repeat(2,1fr);}.grid-4{grid-template-columns:repeat(2,1fr);}}
+/* divers */
+.section-title{font-size:11px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3); margin:32px 0 16px; display:flex; align-items:center; gap:14px;}
+.section-title::after{content:""; flex:1; height:1px; background:var(--border);}
+.chart-wrap{position:relative; width:100%;}
+.chart-wrap.h-sm{height:230px;} .chart-wrap.h-md{height:300px;} .chart-wrap.h-lg{height:360px;}
+.empty{padding:28px; text-align:center; color:var(--ink-3); font-size:13px;}
+.muted{color:var(--ink-2);} .small{font-size:12px;}
+.flex{display:flex;} .between{justify-content:space-between;} .center{align-items:center;}
+.gap8{gap:8px;} .gap12{gap:12px;} .wrap{flex-wrap:wrap;}
+.mt8{margin-top:10px;} .mt16{margin-top:16px;} .mb12{margin-bottom:12px;}
 
-/* stat tile */
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px;box-shadow:var(--sh);}
-.stat-label{font-size:11.5px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;}
-.stat-value{font-family:var(--font-display);font-size:26px;font-weight:700;letter-spacing:-.03em;color:var(--ink);}
-.stat-sub{font-size:12px;color:var(--ink-3);margin-top:4px;}
-.stat.positive .stat-value{color:var(--green);}
-.stat.negative .stat-value{color:var(--coral-deep);}
+.seclabel{display:none;}
 
-/* table */
-table{width:100%;border-collapse:collapse;}
-th{font-size:11.5px;font-weight:700;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;text-align:left;padding:10px 12px;border-bottom:2px solid var(--border);}
-td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--ink);}
-tr:last-child td{border-bottom:none;}
-tr:hover td{background:var(--surface-2);}
+/* toast */
+.toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#F3F1EA; padding:12px 18px; border-radius:11px; font-size:13px; font-weight:500; box-shadow:0 12px 32px -8px rgba(28,36,32,.4); opacity:0; pointer-events:none; transition:all .3s ease; z-index:300;}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
-/* chart */
-.chart-wrap{position:relative;height:240px;}
+/* login */
+.login-overlay{position:fixed; inset:0; background:rgba(11,11,11,.5); backdrop-filter:blur(5px); display:none; align-items:center; justify-content:center; z-index:400;}
+.login-overlay.show{display:flex;}
+.login-card{background:var(--surface); border-radius:18px; padding:30px; width:min(380px,92vw); box-shadow:0 24px 60px -16px rgba(11,11,11,.4); display:flex; flex-direction:column; gap:13px;}
+.login-card h2{font-size:19px; color:var(--ink);}
+.login-card input{border:1px solid var(--border-strong); border-radius:10px; padding:11px 13px; font-size:14px;}
+.login-card input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(237,88,71,.16);}
+.login-err{color:var(--neg); font-size:12.5px; min-height:16px;}
 
-/* form overlay */
-.modal-bg{position:fixed;inset:0;background:rgba(11,11,11,.5);z-index:100;display:grid;place-items:center;padding:20px;}
-.modal{background:var(--surface);border-radius:22px;padding:32px;width:min(520px,100%);max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px -18px rgba(11,11,11,.3);}
-.modal h2{font-size:20px;margin-bottom:20px;}
-.field{margin-bottom:16px;}
-.field label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:6px;}
-.field input,.field select{width:100%;border:1px solid var(--border-strong);border-radius:10px;padding:11px 13px;font-size:14px;color:var(--ink);}
-.field input:focus,.field select:focus{outline:none;border-color:var(--coral);box-shadow:0 0 0 3px rgba(237,88,71,.16);}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);}
+/* panneaux */
+.panel{display:none; animation:fade .34s cubic-bezier(.22,1,.36,1);}
+.panel.active{display:block;}
+@keyframes fade{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
 
-/* badge */
-.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:6px;padding:3px 8px;}
-.badge.positive{background:var(--green-bg);color:var(--green);}
-.badge.negative{background:var(--red-bg);color:var(--coral-deep);}
+.print-head{display:none;}
 
-/* loader */
-.loader{min-height:60vh;display:grid;place-items:center;color:var(--ink-3);font-size:14px;gap:12px;}
-.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--coral);border-radius:50%;animation:spin .8s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
+/* ============================================================
+   IMPRESSION / PDF
+   ============================================================ */
+@media print{
+  @page{margin:13mm;}
+  body{background:#fff;}
+  .sidebar,.topbar-actions,.nav-toggle,.toast,.login-overlay,.scrim{display:none !important;}
+  .app{display:block;}
+  .main{height:auto; overflow:visible;}
+  .content{height:auto; overflow:visible; padding:0;}
+  .topbar{border:none; padding:0 0 10px;}
+  .print-head{display:flex !important; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--ink); padding-bottom:10px; margin-bottom:16px;}
+  .seclabel{display:block !important; font-size:17px; margin:0 0 14px; color:var(--ink);}
+  .panel{display:block !important; page-break-before:always; padding-top:10px;}
+  .panel:first-of-type{page-break-before:avoid;}
+  .card,.kpi,table,.note,.chart-wrap{break-inside:avoid; box-shadow:none;}
+  .card{border:1px solid #D7D1C2;}
+  *{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+}
+
+@media(max-width:820px){
+  .sidebar{position:fixed; left:0; top:0; z-index:200; transform:translateX(-100%); transition:transform .26s cubic-bezier(.22,1,.36,1); box-shadow:0 0 40px rgba(0,0,0,.3);}
+  .app.nav-open .sidebar{transform:none;}
+  .app.nav-open .scrim{display:block; position:fixed; inset:0; background:rgba(11,11,11,.4); z-index:150;}
+  .nav-toggle{display:inline-flex;}
+  .kpis{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:560px){.kpis{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
 
-<!-- topbar -->
-<header class="topbar">
-  <a class="brand" href="https://dashboard.snapshotmedia.ch">
-    <div class="brand-mark"><span data-icon="aperture" data-size="18"></span></div>
-    <div><div class="brand-name">Snapshot Media</div><div class="brand-sub">Patrimoine immo</div></div>
-  </a>
-  <div class="topbar-right">
-    <span class="user-email" id="userEmail"></span>
-    <a href="https://dashboard.snapshotmedia.ch" class="btn-sm"><span data-icon="grid" data-size="14"></span> Dashboard</a>
-  </div>
-</header>
+<div class="app" id="app">
+  <div class="scrim" onclick="document.getElementById('app').classList.remove('nav-open')"></div>
 
-<!-- loading -->
-<div class="loader" id="loader">
-  <div class="spinner"></div>
-  <span>Chargement…</span>
-</div>
-
-<!-- main -->
-<main class="wrap hidden" id="main">
-  <div class="page-header">
-    <div class="page-kicker">Patrimoine immobilier</div>
-    <h1 class="page-title" id="propTitle">Bien immobilier</h1>
-    <p class="page-lead" id="propAddress"></p>
-  </div>
-
-  <!-- KPIs -->
-  <div class="section-title">Vue d'ensemble</div>
-  <div class="grid-4" style="margin-bottom:28px;">
-    <div class="stat"><div class="stat-label">Valeur du bien</div><div class="stat-value" id="kpiValeur">—</div><div class="stat-sub" id="kpiValeurDate"></div></div>
-    <div class="stat"><div class="stat-label">Prêt restant dû</div><div class="stat-value" id="kpiPret">—</div><div class="stat-sub" id="kpiPretTaux"></div></div>
-    <div class="stat" id="kpiCfCard"><div class="stat-label">Cash-flow mensuel</div><div class="stat-value" id="kpiCf">—</div><div class="stat-sub">loyer − charges − intérêts</div></div>
-    <div class="stat"><div class="stat-label">Total 3a constitué</div><div class="stat-value" id="kpi3a">—</div><div class="stat-sub" id="kpi3aSub"></div></div>
-  </div>
-
-  <!-- financement + cash-flow -->
-  <div class="section-title">Financement & cash-flow</div>
-  <div class="grid-2" style="margin-bottom:28px;">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-        <h3 style="font-size:15px;">Financement</h3>
-        <button class="btn-sm" onclick="openConfig()"><span data-icon="edit" data-size="13"></span> Modifier</button>
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span data-icon="house" data-size="19"></span></div>
+      <div>
+        <div class="brand-name">Patrimoine</div>
+        <div class="brand-sub">Gestion privée</div>
       </div>
-      <table>
-        <tbody id="finTable"></tbody>
-      </table>
     </div>
-    <div class="card">
-      <h3 style="font-size:15px;margin-bottom:18px;">Cash-flow mensuel</h3>
-      <div class="chart-wrap"><canvas id="cfChart"></canvas></div>
-    </div>
-  </div>
 
-  <!-- 3a -->
-  <div class="section-title">Pilier 3a — Historique des valeurs</div>
-  <div class="card" style="margin-bottom:28px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-      <h3 style="font-size:15px;">Évolution du capital 3a</h3>
-      <button class="btn-primary" onclick="open3aForm()"><span data-icon="plus" data-size="15"></span> Ajouter une valeur</button>
+    <div class="property-card">
+      <div class="prop-label">Bien suivi</div>
+      <div class="prop-name" id="propName">—</div>
+      <div class="prop-place" id="propPlace">—</div>
+      <div class="prop-value num" id="propValue">—</div>
+      <div class="prop-owners" id="propOwners">—</div>
     </div>
-    <div class="chart-wrap" style="height:200px;margin-bottom:24px;"><canvas id="chart3a"></canvas></div>
-    <div style="overflow-x:auto;">
-      <table>
-        <thead><tr><th>Date</th><th>Contrat</th><th>Valeur (CHF)</th><th>Variation</th><th></th></tr></thead>
-        <tbody id="hist3aTable"></tbody>
-      </table>
-    </div>
-  </div>
-</main>
 
-<!-- modal config -->
-<div class="modal-bg hidden" id="modalConfig">
-  <div class="modal">
-    <h2>Configuration du bien</h2>
-    <div class="field"><label>Nom du bien</label><input id="cfgNom" placeholder="ex: Appartement Auboranges" /></div>
-    <div class="field"><label>Adresse</label><input id="cfgAdresse" placeholder="ex: Route de X, 1674 Auboranges FR" /></div>
-    <div class="field-row">
-      <div class="field"><label>Valeur estimée (CHF)</label><input id="cfgValeur" type="number" placeholder="0" /></div>
-      <div class="field"><label>Date d'estimation</label><input id="cfgValeurDate" type="month" /></div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Montant hypothèque (CHF)</label><input id="cfgHypo" type="number" placeholder="0" /></div>
-      <div class="field"><label>Taux d'intérêt (%)</label><input id="cfgTaux" type="number" step="0.01" placeholder="0.00" /></div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Loyer mensuel (CHF)</label><input id="cfgLoyer" type="number" placeholder="0" /></div>
-      <div class="field"><label>Charges mensuelles (CHF)</label><input id="cfgCharges" type="number" placeholder="0" /></div>
-    </div>
-    <div class="field"><label>Contrats 3a (séparés par virgule)</label><input id="cfgContrats" placeholder="ex: Freizügigkeit, Frankia" /></div>
-    <div class="modal-footer">
-      <button class="btn-sm" onclick="closeConfig()">Annuler</button>
-      <button class="btn-primary" id="cfgSaveBtn" onclick="saveConfig()"><span data-icon="check" data-size="15"></span> Enregistrer</button>
-    </div>
-  </div>
-</div>
+    <nav class="nav" id="nav">
+      <button class="nav-item active" data-tab="recap"><span data-icon="grid"></span>Vue d'ensemble</button>
+      <button class="nav-item" data-tab="cashflow"><span data-icon="wallet"></span>Cash-flow</button>
+      <button class="nav-item" data-tab="calendrier"><span data-icon="calendar"></span>Calendrier</button>
+      <button class="nav-item" data-tab="projections"><span data-icon="trending"></span>Projections &amp; 3a</button>
+      <button class="nav-item" data-tab="parametres"><span data-icon="sliders"></span>Paramètres</button>
+    </nav>
 
-<!-- modal 3a -->
-<div class="modal-bg hidden" id="modal3a">
-  <div class="modal">
-    <h2>Ajouter une valeur 3a</h2>
-    <div class="field-row">
-      <div class="field"><label>Date</label><input id="h3aDate" type="month" /></div>
-      <div class="field"><label>Contrat</label><select id="h3aContrat"><option value="">— choisir —</option></select></div>
+    <div class="sidebar-foot">
+      <a class="logout-btn" href="https://dashboard.snapshotmedia.ch" style="text-decoration:none"><span data-icon="grid" data-size="15"></span>Portail</a>
+      <div class="sync" id="syncPill">● —</div>
+      <button class="logout-btn" id="logoutBtn" style="display:none" onclick="logout()"><span data-icon="logout" data-size="15"></span>Déconnexion</button>
     </div>
-    <div class="field"><label>Valeur (CHF)</label><input id="h3aValeur" type="number" step="0.01" placeholder="0.00" /></div>
-    <div class="modal-footer">
-      <button class="btn-sm" onclick="close3aForm()">Annuler</button>
-      <button class="btn-primary" id="h3aSaveBtn" onclick="save3a()"><span data-icon="check" data-size="15"></span> Enregistrer</button>
-    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="nav-toggle" onclick="document.getElementById('app').classList.toggle('nav-open')"><span data-icon="menu" data-size="20"></span></button>
+        <div>
+          <div class="crumb">Patrimoine immobilier</div>
+          <h1 class="page-title" id="pageTitle">Vue d'ensemble</h1>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" onclick="exportExcel()"><span data-icon="download"></span>Excel</button>
+        <button class="btn btn-ghost" onclick="exportPDF()"><span data-icon="printer"></span>PDF</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="print-head">
+        <div><div class="crumb">Patrimoine immobilier</div><div id="printTitle" style="font-family:var(--font-display);font-weight:600;font-size:19px;margin-top:4px"></div></div>
+        <div id="printDate" class="small muted"></div>
+      </div>
+
+      <section class="panel active" id="panel-recap"><h2 class="seclabel">Vue d'ensemble</h2><div id="recapBody"></div></section>
+      <section class="panel" id="panel-cashflow"><h2 class="seclabel">Cash-flow &amp; coût de détention</h2><div id="cashflowBody"></div></section>
+      <section class="panel" id="panel-calendrier"><h2 class="seclabel">Calendrier &amp; échéances</h2><div id="calendrierBody"></div></section>
+      <section class="panel" id="panel-projections"><h2 class="seclabel">Projections &amp; 3e pilier</h2><div id="projectionsBody"></div></section>
+      <section class="panel" id="panel-parametres"><h2 class="seclabel">Paramètres</h2><div id="parametresBody"></div></section>
+    </main>
   </div>
 </div>
 
-<script src="vendor/chart.umd.js"></script>
+<div class="toast" id="toast"></div>
+
 <script>
-/* ====================== icônes ====================== */
+/* ============================================================================
+   PATRIMOINE IMMOBILIER — v2
+   Moteur de calcul, couche de données serveur (VPS) et exports identiques à v1.
+   Refonte visuelle complète : navigation latérale, type Switzer/Satoshi,
+   palette gestion de fortune, icônes au trait (aucun emoji).
+   ============================================================================ */
+
+/* ====================== ICÔNES (Lucide, inline — MIT) ====================== */
 const ICONS={
-  aperture:'<circle cx="12" cy="12" r="10"/><path d="m14.31 8 5.74 9.94"/><path d="M9.69 8h11.48"/><path d="m7.38 12 5.74-9.94"/><path d="M9.69 16 3.95 6.06"/><path d="M14.31 16H2.83"/><path d="m16.62 12-5.74 9.94"/>',
   grid:'<rect width="7" height="9" x="3" y="3" rx="1.5"/><rect width="7" height="5" x="14" y="3" rx="1.5"/><rect width="7" height="9" x="14" y="12" rx="1.5"/><rect width="7" height="5" x="3" y="16" rx="1.5"/>',
-  edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
-  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
-  check:'<polyline points="20 6 9 17 4 12"/>',
-  trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>',
+  wallet:'<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h16a1 1 0 0 1 1 1v3"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-3"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
+  calendar:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2.5"/><path d="M3 10h18"/>',
+  trending:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  sliders:'<line x1="21" x2="14" y1="6" y2="6"/><line x1="10" x2="3" y1="6" y2="6"/><line x1="21" x2="12" y1="18" y2="18"/><line x1="8" x2="3" y1="18" y2="18"/><circle cx="12" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  printer:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  x:'<path d="M18 6 6 18"/><path d="M6 6l12 12"/>',
+  reset:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  house:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+  menu:'<line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>'
 };
-function icon(n,s=18){return`<svg class="ic-svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`;}
-function initIcons(r=document){r.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=icon(el.dataset.icon,+(el.dataset.size||18));});}
+function icon(name,size=16){return `<svg class="ic-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]||''}</svg>`;}
+function initIcons(){document.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=icon(el.dataset.icon, +(el.dataset.size||18));});}
 
-/* ====================== helpers ====================== */
-const $=id=>document.getElementById(id);
-const fmt=v=>new Intl.NumberFormat('fr-CH',{maximumFractionDigits:0}).format(+v||0);
-const fmtChf=v=>'CHF '+fmt(v);
-const fmtPct=v=>(+v||0).toFixed(2)+'%';
+/* ====================== A. DONNÉES PAR DÉFAUT ====================== */
+const STORE_KEY = 'dashboard_immo_auboranges_v1';
 
-let STATE={};
-let cfChart=null, chart3a=null;
+function defaultData(){
+  return {
+    meta:{ proprietaires:'Kevin Chinelli & Aurélia Mercier', bien:'Appartement neuf 5.5 pièces — PPE', lieu:'Auboranges (canton de Fribourg)', dateAcquisition:'2026-09-01' },
+    prix:{ appartement:1090000, placeCouverte:25000, placeNonCouverte:15000, prixTotalActe:1130000, baseBancaire:1150000 },
+    fin:{ hypotheque:920000, deuxiemeRang:154500, amortAnnuel:10300, dureeAmort:15 },
+    fp:{ lppKevin:86000, lppAurelia:29000, cashAcompte1:20000, cashAcompte2:58000, troisA:37000, total:230000 },
+    frais:{ notaire:null, dossierBanque:920, courtier:4600 },
+    tranches:[ {id:uid(), montant:920000, taux:1.8, type:'Fixe', debut:'2026-09-01', echeance:'2031-09-01'} ],
+    charges:{ chargesPPE:null, fondsReno:null, tauxTheorique:5, entretienPct:1, revenuBrut:null },
+    contrats:[ {id:uid(), titulaire:'Kevin', banque:'', versement:7258}, {id:uid(), titulaire:'Aurélia', banque:'', versement:3042} ],
+    historique:[],
+    rendement:4
+  };
+}
 
-/* ====================== auth + boot ====================== */
+/* ====================== B. PERSISTANCE & MIGRATION ====================== */
+function uid(){ return 'id'+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4); }
+function deepMerge(def, loaded){
+  if(Array.isArray(def)) return Array.isArray(loaded) ? loaded : def;
+  if(def && typeof def==='object'){
+    const out={...def};
+    if(loaded && typeof loaded==='object'){ for(const k in loaded){ out[k]=(k in def)?deepMerge(def[k],loaded[k]):loaded[k]; } }
+    return out;
+  }
+  return loaded===undefined ? def : loaded;
+}
+
+let state = defaultData();
+
+/* --- Couche de données : API du portail (/api/patrimoine), repli local pour démo/hors-ligne --- */
+const API='/api';
+let MODE='local', AUTH_ON=false, BOOTING=true, saveTimer=null;
+
+async function api(path, opts={}){
+  const res = await fetch(API+path, {credentials:'same-origin', headers:{'Content-Type':'application/json'}, ...opts});
+  if(res.status===401){ const e=new Error('auth'); e.auth=true; throw e; }
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const ct=res.headers.get('content-type')||'';
+  return (res.status===204 || !ct.includes('application/json')) ? null : res.json();
+}
+function configPayload(){ const c={...state}; delete c.historique; delete c._auth; return c; }
+
 async function boot(){
+  BOOTING=true;
   initIcons();
   try{
-    const res=await fetch('/api/state',{credentials:'include',redirect:'manual'});
-    if(res.type==='opaqueredirect'||res.status===401||res.status===302){
-      window.location.href='https://dashboard.snapshotmedia.ch';
-      return;
-    }
-    STATE=await res.json();
-    $('userEmail').textContent=STATE._user?.email||'';
-    renderAll();
-    $('loader').classList.add('hidden');
-    $('main').classList.remove('hidden');
-  }catch(e){
-    window.location.href='https://dashboard.snapshotmedia.ch';
+    const data=await api('/state');
+    if(!data || typeof data!=='object') throw new Error('payload');
+    state=deepMerge(defaultData(), data);
+    MODE='server'; AUTH_ON=!!data._auth; setSync('ok');
+  }catch(err){
+    if(err && err.auth){ showLogin(); return; }
+    MODE='local';
+    try{ const raw=localStorage.getItem(STORE_KEY); if(raw) state=deepMerge(defaultData(), JSON.parse(raw)); }catch(e){}
+    setSync('local');
   }
-}
-
-/* ====================== render ====================== */
-function renderAll(){
-  const s=STATE;
-  // KPIs
-  $('propTitle').textContent=s.nom||'Bien immobilier';
-  $('propAddress').textContent=s.adresse||'';
-  $('kpiValeur').textContent=s.valeur?fmtChf(s.valeur):'—';
-  $('kpiValeurDate').textContent=s.valeurDate?'Estimé '+s.valeurDate:'';
-  $('kpiPret').textContent=s.hypo?fmtChf(s.hypo):'—';
-  $('kpiPretTaux').textContent=s.taux?fmtPct(s.taux)+' / an':'';
-
-  const loyer=+(s.loyer||0), charges=+(s.charges||0);
-  const interets=s.hypo&&s.taux ? (+s.hypo * +s.taux/100/12) : 0;
-  const cf=loyer-charges-interets;
-  $('kpiCf').textContent=cf?fmtChf(cf):'—';
-  $('kpiCfCard').className='stat '+(cf>0?'positive':cf<0?'negative':'');
-
-  const hist=s.historique||[];
-  const total3a=sumLatest3a(hist);
-  $('kpi3a').textContent=total3a?fmtChf(total3a):'—';
-  $('kpi3aSub').textContent=total3a?'dernières valeurs par contrat':'aucune donnée';
-
-  // fin table
-  const rows=[
-    ['Prix d\'acquisition','achat','CHF'],
-    ['Apport','apport','CHF'],
-    ['Hypothèque','hypo','CHF'],
-    ['Taux d\'intérêt','taux','%'],
-    ['Loyer mensuel','loyer','CHF'],
-    ['Charges mensuelles','charges','CHF'],
-    ['Intérêts mensuels',null,'calc'],
-  ];
-  $('finTable').innerHTML=rows.map(([label,key,type])=>{
-    let val='—';
-    if(key===null) val=interets?fmtChf(interets):'—';
-    else if(type==='CHF') val=s[key]?fmtChf(s[key]):'—';
-    else if(type==='%') val=s[key]?fmtPct(s[key]):'—';
-    return`<tr><td style="color:var(--ink-3)">${label}</td><td style="font-weight:600;text-align:right">${val}</td></tr>`;
-  }).join('');
-
-  // cash-flow chart
-  renderCfChart(loyer, charges, interets);
-
-  // 3a
-  render3aTable(hist);
-  render3aChart(hist, (s.contrats||'').split(',').map(c=>c.trim()).filter(Boolean));
-}
-
-function sumLatest3a(hist){
-  const byContrat={};
-  for(const h of hist){
-    if(!byContrat[h.contratId]||h.date>byContrat[h.contratId].date) byContrat[h.contratId]=h;
-  }
-  return Object.values(byContrat).reduce((sum,h)=>sum+(+h.valeur||0),0);
-}
-
-function renderCfChart(loyer,charges,interets){
-  if(cfChart) cfChart.destroy();
-  const ctx=$('cfChart');
-  cfChart=new Chart(ctx,{
-    type:'bar',
-    data:{
-      labels:['Loyer','Charges','Intérêts','Net'],
-      datasets:[{
-        data:[loyer,-charges,-interets,loyer-charges-interets],
-        backgroundColor:['#1A7A4A','#ED5847','#ED5847',loyer-charges-interets>=0?'#1A7A4A':'#B82D1C'],
-        borderRadius:6,
-      }]
-    },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'CHF '+fmt(ctx.raw)}}},
-      scales:{y:{ticks:{callback:v=>'CHF '+fmt(v)},grid:{color:'#EAEAEA'}},x:{grid:{display:false}}}
-    }
-  });
-}
-
-function render3aChart(hist,contrats){
-  if(chart3a) chart3a.destroy();
-  if(!hist.length) return;
-
-  const dates=[...new Set(hist.map(h=>h.date))].sort();
-  const series=contrats.length?contrats:[...new Set(hist.map(h=>h.contratId))];
-  const COLORS=['#ED5847','#1D2026','#1A7A4A','#F6ABA2','#4A4D54'];
-
-  const datasets=series.map((c,i)=>{
-    const data=dates.map(d=>{
-      const last=hist.filter(h=>h.contratId===c&&h.date<=d).sort((a,b)=>b.date.localeCompare(a.date))[0];
-      return last?+last.valeur:null;
-    });
-    return{label:c,data,borderColor:COLORS[i%COLORS.length],backgroundColor:'transparent',tension:.3,spanGaps:true,pointRadius:4};
-  });
-
-  chart3a=new Chart($('chart3a'),{
-    type:'line',
-    data:{labels:dates,datasets},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{font:{size:12},boxWidth:12}}},
-      scales:{y:{ticks:{callback:v=>'CHF '+fmt(v)},grid:{color:'#EAEAEA'}},x:{grid:{display:false}}}
-    }
-  });
-}
-
-function render3aTable(hist){
-  if(!hist.length){
-    $('hist3aTable').innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--ink-3);padding:24px">Aucune donnée — ajoutez une première valeur.</td></tr>';
-    return;
-  }
-  const sorted=[...hist].sort((a,b)=>b.date.localeCompare(a.date)||b.contratId.localeCompare(a.contratId));
-  $('hist3aTable').innerHTML=sorted.map(h=>{
-    const prev=hist.filter(x=>x.contratId===h.contratId&&x.date<h.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
-    let badge='';
-    if(prev){
-      const diff=+h.valeur-+prev.valeur;
-      const pct=(diff/+prev.valeur*100).toFixed(1);
-      badge=`<span class="badge ${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${fmtChf(diff)} (${pct}%)</span>`;
-    }
-    return`<tr>
-      <td>${h.date}</td>
-      <td style="font-weight:600">${h.contratId}</td>
-      <td>${fmtChf(h.valeur)}</td>
-      <td>${badge}</td>
-      <td><button class="btn-danger" onclick="del3a('${h.id}')">${icon('trash',12)}</button></td>
-    </tr>`;
-  }).join('');
-}
-
-/* ====================== config modal ====================== */
-function openConfig(){
-  const s=STATE;
-  $('cfgNom').value=s.nom||'';
-  $('cfgAdresse').value=s.adresse||'';
-  $('cfgValeur').value=s.valeur||'';
-  $('cfgValeurDate').value=s.valeurDate||'';
-  $('cfgHypo').value=s.hypo||'';
-  $('cfgTaux').value=s.taux||'';
-  $('cfgLoyer').value=s.loyer||'';
-  $('cfgCharges').value=s.charges||'';
-  $('cfgContrats').value=s.contrats||'';
-  $('modalConfig').classList.remove('hidden');
-}
-function closeConfig(){$('modalConfig').classList.add('hidden');}
-
-async function saveConfig(){
-  const btn=$('cfgSaveBtn'); btn.disabled=true;
-  const body={
-    nom:$('cfgNom').value.trim(),
-    adresse:$('cfgAdresse').value.trim(),
-    valeur:+$('cfgValeur').value||0,
-    valeurDate:$('cfgValeurDate').value,
-    hypo:+$('cfgHypo').value||0,
-    taux:+$('cfgTaux').value||0,
-    loyer:+$('cfgLoyer').value||0,
-    charges:+$('cfgCharges').value||0,
-    contrats:$('cfgContrats').value.trim(),
-  };
-  try{
-    await fetch('/api/config',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    Object.assign(STATE,body);
-    renderAll();
-    closeConfig();
-  }finally{ btn.disabled=false; }
-}
-
-/* ====================== 3a modal ====================== */
-function open3aForm(){
-  const contrats=(STATE.contrats||'').split(',').map(c=>c.trim()).filter(Boolean);
-  const sel=$('h3aContrat');
-  sel.innerHTML='<option value="">— choisir —</option>'+contrats.map(c=>`<option>${c}</option>`).join('');
-  $('h3aDate').value=new Date().toISOString().slice(0,7);
-  $('h3aValeur').value='';
-  $('modal3a').classList.remove('hidden');
-}
-function close3aForm(){$('modal3a').classList.add('hidden');}
-
-async function save3a(){
-  const contrat=$('h3aContrat').value;
-  const date=$('h3aDate').value;
-  const valeur=+$('h3aValeur').value;
-  if(!contrat||!date||!valeur){ alert('Tous les champs sont requis.'); return; }
-  const btn=$('h3aSaveBtn'); btn.disabled=true;
-  const id=`${contrat.replace(/\s+/g,'_')}_${date}`;
-  try{
-    const res=await fetch('/api/historique',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,date,contratId:contrat,valeur})});
-    if(res.ok){
-      const entry=await res.json();
-      STATE.historique=[...(STATE.historique||[]).filter(h=>h.id!==id),entry];
-      renderAll();
-      close3aForm();
-    }else{
-      const err=await res.json();
-      alert(err.error||'Erreur lors de l\'enregistrement.');
-    }
-  }finally{ btn.disabled=false; }
-}
-
-async function del3a(id){
-  if(!confirm('Supprimer cet enregistrement ?')) return;
-  await fetch(`/api/historique/${encodeURIComponent(id)}`,{method:'DELETE',credentials:'include'});
-  STATE.historique=(STATE.historique||[]).filter(h=>h.id!==id);
   renderAll();
+  BOOTING=false;
 }
 
+function save(){
+  if(BOOTING) return;
+  if(MODE==='server'){
+    clearTimeout(saveTimer); setSync('saving');
+    saveTimer=setTimeout(async ()=>{ try{ await api('/config',{method:'PUT', body:JSON.stringify(configPayload())}); setSync('ok'); }catch(e){ setSync('error'); } }, 600);
+  }else{
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
+    setSync('local');
+  }
+}
+
+function setSync(s){
+  const p=document.getElementById('syncPill'); if(!p) return;
+  const map={ok:['rgba(245,245,245,.85)','Synchronisé'], saving:['#F6ABA2','Enregistrement…'], error:['#ED5847','Erreur de synchro'], local:['rgba(255,255,255,.5)','Mode local']};
+  const [col,txt]=map[s]||map.local;
+  p.innerHTML=`<span style="color:${col};font-size:9px">●</span> ${txt}`;
+  const lo=document.getElementById('logoutBtn'); if(lo) lo.style.display=(MODE==='server'&&AUTH_ON)?'':'none';
+}
+
+/* Auth gérée par le portail (magic-link). Session expirée/absente → retour au portail. */
+function showLogin(){ location.href='https://dashboard.snapshotmedia.ch'; }
+function logout(){ fetch('https://dashboard.snapshotmedia.ch/api/auth/logout',{method:'POST',credentials:'include'}).catch(()=>{}).then(()=>{ location.href='https://dashboard.snapshotmedia.ch'; }); }
+
+/* ====================== C. HELPERS DE FORMAT ====================== */
+const fmtCHF0=new Intl.NumberFormat('de-CH',{style:'currency',currency:'CHF',maximumFractionDigits:0});
+const fmtCHF2=new Intl.NumberFormat('de-CH',{style:'currency',currency:'CHF',minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtNum =new Intl.NumberFormat('de-CH',{maximumFractionDigits:0});
+function chf(n,dec){ n=num(n); return dec?fmtCHF2.format(n):fmtCHF0.format(n); }
+function pct(n,dec=1){ return (num(n)).toFixed(dec).replace('.',',')+' %'; }
+function num(v){ if(v===null||v===undefined||v==='') return 0; const n=typeof v==='number'?v:parseFloat(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(n)?0:n; }
+function isEmpty(v){ return v===null||v===undefined||v===''; }
+function fmtDate(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}.${m}.${y}`; }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
+function yearsBetween(a,b){ return (new Date(b)-new Date(a))/(86400000*365.25); }
+function addMonths(iso,m){ const d=new Date(iso); d.setMonth(d.getMonth()+m); return d.toISOString().slice(0,10); }
+function badge(){ return '<span class="badge-est">à confirmer</span>'; }
+function note(tag,html,warn){ return `<div class="note${warn?' warn':''}"><span class="note-tag">${tag}</span><div>${html}</div></div>`; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+
+/* ====================== D. CALCULS ====================== */
+function calc(){
+  const s=state;
+  const base=num(s.prix.baseBancaire), hyp=num(s.fin.hypotheque), r2=num(s.fin.deuxiemeRang), r1=Math.max(0,hyp-r2);
+  const ltv=base>0?hyp/base*100:0;
+  let mt=0,wt=0; s.tranches.forEach(t=>{const m=num(t.montant); mt+=m; wt+=m*num(t.taux);});
+  const tauxMoyen=mt>0?wt/mt:0;
+  const interetsAnnuels=s.tranches.reduce((a,t)=>a+num(t.montant)*num(t.taux)/100,0);
+  const chargesPPE=num(s.charges.chargesPPE), fondsReno=num(s.charges.fondsReno), amort=num(s.fin.amortAnnuel);
+  const detentionAn=interetsAnnuels+amort+chargesPPE+fondsReno;
+  const tauxTheo=num(s.charges.tauxTheorique);
+  const entretienTheo=base*num(s.charges.entretienPct)/100;
+  const interetTheo=hyp*tauxTheo/100;
+  const chargeTheoAnnuelle=interetTheo+amort+entretienTheo;
+  const revenu=num(s.charges.revenuBrut);
+  const tauxEffort=revenu>0?chargeTheoAnnuelle/revenu*100:null;
+  const fp=s.fp;
+  const sousLPP=num(fp.lppKevin)+num(fp.lppAurelia);
+  const sousCash=num(fp.cashAcompte1)+num(fp.cashAcompte2);
+  const fpTotal=num(fp.total);
+  const fraisTotal=num(s.frais.notaire)+num(s.frais.dossierBanque)+num(s.frais.courtier);
+  const coutOperation=num(s.prix.prixTotalActe)+fraisTotal;
+  const versement3aTotal=s.contrats.reduce((a,c)=>a+num(c.versement),0);
+  return {base,hyp,r1,r2,ltv,tauxMoyen,interetsAnnuels,chargesPPE,fondsReno,amort,detentionAn,interetTheo,entretienTheo,chargeTheoAnnuelle,tauxEffort,revenu,sousLPP,sousCash,fpTotal,fraisTotal,coutOperation,versement3aTotal};
+}
+function projectionSeries(c, rendement){
+  const horizon=num(state.fin.dureeAmort), versement=c.versement3aTotal, cible=[], proj=[]; let v=0;
+  for(let y=0;y<=horizon;y++){ cible.push(versement*y); if(y===0){proj.push(0);} else {v=v*(1+rendement/100)+versement; proj.push(v);} }
+  return {cible, proj, horizon};
+}
+function realTotals(){
+  const s=state, dates=[...new Set(s.historique.map(h=>h.date))].sort();
+  return dates.map(d=>{ let total=0; s.contrats.forEach(c=>{ const past=s.historique.filter(h=>h.contratId===c.id && h.date<=d).sort((a,b)=>a.date.localeCompare(b.date)); if(past.length) total+=num(past[past.length-1].valeur); }); return {date:d, value:total}; });
+}
+function compareSeries(rendement){
+  const s=state, c=calc(), horizon=num(s.fin.dureeAmort), tx=c.tauxMoyen/100, amort=num(s.fin.amortAnnuel);
+  const interIndirect=[], interDirect=[], capital3a=[]; let cumInd=0,cumDir=0,dette=c.hyp,cap=0; const versement=c.versement3aTotal;
+  for(let y=0;y<=horizon;y++){ if(y>0){ cumInd+=c.hyp*tx; cumDir+=dette*tx; dette=Math.max(c.r1,dette-amort); cap=cap*(1+rendement/100)+versement; } interIndirect.push(cumInd); interDirect.push(cumDir); capital3a.push(cap); }
+  return {horizon,interIndirect,interDirect,capital3a,detteFinaleDirect:dette,detteFinaleIndirect:c.hyp,interTotalIndirect:cumInd,interTotalDirect:cumDir,capitalFinal:cap,surcout:cumInd-cumDir};
+}
+
+/* ====================== E. RENDU ====================== */
+const charts={};
+function destroyChart(k){ if(charts[k]){ charts[k].destroy(); delete charts[k]; } }
+
+function renderHeader(){
+  const s=state;
+  document.getElementById('propName').textContent=s.meta.bien;
+  document.getElementById('propPlace').textContent=s.meta.lieu;
+  document.getElementById('propValue').textContent=chf(s.prix.prixTotalActe);
+  document.getElementById('propOwners').textContent=s.meta.proprietaires;
+  document.getElementById('printDate').textContent='Édité le '+fmtDate(todayISO());
+}
+
+function renderAll(){ renderHeader(); renderRecap(); renderCashflow(); renderCalendrier(); renderProjections(); renderParametres(); save(); }
+
+/* ---------- E.1 VUE D'ENSEMBLE ---------- */
+function renderRecap(){
+  const c=calc(), s=state;
+  const pctBase=v=>s.prix.baseBancaire>0?pct(num(v)/c.base*100):'—';
+  const ltvWarn=c.ltv>80, effortWarn=c.tauxEffort!==null && c.tauxEffort>33;
+  document.getElementById('recapBody').innerHTML=`
+    <div class="grid kpis">
+      <div class="kpi ink"><div class="kpi-label">Prix d'acquisition</div><div class="kpi-value num">${chf(s.prix.prixTotalActe)}</div><div class="kpi-sub">Places de parc comprises</div></div>
+      <div class="kpi"><div class="kpi-label">Hypothèque</div><div class="kpi-value num">${chf(c.hyp)}</div><div class="kpi-sub">LTV ${pct(c.ltv)} · base ${chf(c.base)}</div></div>
+      <div class="kpi pos"><div class="kpi-label">Fonds propres</div><div class="kpi-value num">${chf(c.fpTotal)}</div><div class="kpi-sub">LPP ${chf(c.sousLPP)} · cash ${chf(c.sousCash)} · 3a ${chf(s.fp.troisA)}</div></div>
+      <div class="kpi accent"><div class="kpi-label">Coût total de l'opération</div><div class="kpi-value num">${chf(c.coutOperation)}</div><div class="kpi-sub">Prix acte + frais ${chf(c.fraisTotal)}</div></div>
+    </div>
+
+    <div style="margin-top:18px">${note('Information — écart de prix', `Le prix d'acquisition à l'acte est de <b>${chf(s.prix.prixTotalActe)}</b>, places de parc comprises. Le <b>plan de financement a volontairement été établi sur ${chf(c.base)}</b> afin d'anticiper des plus-values (aménagements / valorisation future) — <b>ce n'est pas une erreur</b>. Les ratios (LTV, etc.) se calculent sur la base bancaire de ${chf(c.base)}. Ces valeurs sont éditables dans l'onglet Paramètres.`)}</div>
+
+    <div class="grid cols-2" style="margin-top:18px; align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Structure de financement</h3><span class="card-note">% de la base bancaire</span></div>
+        <table class="data">
+          <thead><tr><th>Source</th><th class="r">Montant</th><th class="r">% base</th></tr></thead>
+          <tbody>
+            <tr><td><span class="dot" style="background:var(--primary)"></span>Hypothèque</td><td class="r num">${chf(c.hyp)}</td><td class="r num">${pctBase(c.hyp)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--primary-2)"></span>LPP / 2e pilier — Kevin</td><td class="r num">${chf(s.fp.lppKevin)}</td><td class="r num">${pctBase(s.fp.lppKevin)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--primary-2)"></span>LPP / 2e pilier — Aurélia</td><td class="r num">${chf(s.fp.lppAurelia)}</td><td class="r num">${pctBase(s.fp.lppAurelia)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--accent)"></span>3a (fonds propres)${badge()}</td><td class="r num">${chf(s.fp.troisA)}</td><td class="r num">${pctBase(s.fp.troisA)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash — acompte 1 (18.03)</td><td class="r num">${chf(s.fp.cashAcompte1)}</td><td class="r num">${pctBase(s.fp.cashAcompte1)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash — acompte 2 (08.05)</td><td class="r num">${chf(s.fp.cashAcompte2)}</td><td class="r num">${pctBase(s.fp.cashAcompte2)}</td></tr>
+            <tr class="total"><td>Total financement</td><td class="r num">${chf(c.hyp+c.fpTotal)}</td><td class="r num">${pctBase(c.hyp+c.fpTotal)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Répartition du financement</h3></div>
+        <div class="chart-wrap h-md"><canvas id="chRecapDonut"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:18px; align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Frais d'acquisition</h3><span class="card-note">en sus des fonds propres</span></div>
+        <table class="data"><tbody>
+          <tr><td>Notaire + droits de mutation (FR)${badge()}</td><td class="r num">${isEmpty(s.frais.notaire)?'<span class="muted">à fournir</span>':chf(s.frais.notaire)}</td></tr>
+          <tr><td>Frais de dossier banque</td><td class="r num">${chf(s.frais.dossierBanque)}</td></tr>
+          <tr><td>Commission courtier en financement</td><td class="r num">${chf(s.frais.courtier)}</td></tr>
+          <tr class="total"><td>Total frais</td><td class="r num">${chf(c.fraisTotal)}</td></tr>
+        </tbody></table>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Ratios &amp; tenue des charges</h3></div>
+        <table class="data"><tbody>
+          <tr><td>LTV (hypothèque / base bancaire)</td><td class="r"><span class="pill ${ltvWarn?'warn':'ok'}">${pct(c.ltv)}</span></td></tr>
+          <tr><td>1er rang <span class="muted small">(sans amortissement)</span></td><td class="r num">${chf(c.r1)}</td></tr>
+          <tr><td>2e rang <span class="muted small">(à amortir)</span>${badge()}</td><td class="r num">${chf(c.r2)}</td></tr>
+          <tr><td>Intérêt théorique (5 %)</td><td class="r num">${chf(c.interetTheo)}</td></tr>
+          <tr><td>+ Amortissement</td><td class="r num">${chf(c.amort)}</td></tr>
+          <tr><td>+ Entretien (${pct(s.charges.entretienPct,0)} de la base)</td><td class="r num">${chf(c.entretienTheo)}</td></tr>
+          <tr class="sub"><td>Charge théorique annuelle</td><td class="r num">${chf(c.chargeTheoAnnuelle)}</td></tr>
+          <tr><td>Taux d'effort (charge / revenu brut)</td><td class="r">${c.tauxEffort===null?'<span class="muted">revenu à saisir</span>':`<span class="pill ${effortWarn?'warn':'ok'}">${pct(c.tauxEffort)}</span>`}</td></tr>
+        </tbody></table>
+        ${(ltvWarn||effortWarn)?`<div style="margin-top:14px">${note('Point d\'attention', `${ltvWarn?'LTV supérieure à 80 %. ':''}${effortWarn?'Taux d\'effort au-dessus du seuil de 33 %.':''}`, true)}</div>`:''}
+      </div>
+    </div>`;
+  buildRecapDonut(c);
+}
+
+/* ---------- E.2 CASH-FLOW ---------- */
+function renderCashflow(){
+  const c=calc(), s=state;
+  document.getElementById('cashflowBody').innerHTML=`
+    <div class="grid kpis">
+      <div class="kpi"><div class="kpi-label">Intérêts annuels</div><div class="kpi-value num">${chf(c.interetsAnnuels)}</div><div class="kpi-sub">Taux moyen pondéré ${pct(c.tauxMoyen,2)}</div></div>
+      <div class="kpi accent"><div class="kpi-label">Amortissement annuel</div><div class="kpi-value num">${chf(c.amort)}</div><div class="kpi-sub">versé en 3a (indirect)</div></div>
+      <div class="kpi"><div class="kpi-label">Charges PPE + rénovation</div><div class="kpi-value num">${chf(c.chargesPPE+c.fondsReno)}</div><div class="kpi-sub">${isEmpty(s.charges.chargesPPE)&&isEmpty(s.charges.fondsReno)?'à fournir':'par an'}</div></div>
+      <div class="kpi ink"><div class="kpi-label">Coût total de détention</div><div class="kpi-value num">${chf(c.detentionAn)}</div><div class="kpi-sub">soit ${chf(c.detentionAn/12)} / mois</div></div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:18px; align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Détail du coût de détention</h3></div>
+        <table class="data">
+          <thead><tr><th>Poste</th><th class="r">Annuel</th><th class="r">Mensuel</th></tr></thead>
+          <tbody>
+            <tr><td><span class="dot" style="background:var(--primary)"></span>Intérêts hypothécaires</td><td class="r num">${chf(c.interetsAnnuels)}</td><td class="r num">${chf(c.interetsAnnuels/12)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--accent)"></span>Amortissement <span class="muted small">(versé en 3a)</span></td><td class="r num">${chf(c.amort)}</td><td class="r num">${chf(c.amort/12)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--primary-2)"></span>Charges PPE courantes</td><td class="r num">${isEmpty(s.charges.chargesPPE)?'<span class="muted">à fournir</span>':chf(c.chargesPPE)}</td><td class="r num">${isEmpty(s.charges.chargesPPE)?'—':chf(c.chargesPPE/12)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--muted-2)"></span>Fonds de rénovation</td><td class="r num">${isEmpty(s.charges.fondsReno)?'<span class="muted">à fournir</span>':chf(c.fondsReno)}</td><td class="r num">${isEmpty(s.charges.fondsReno)?'—':chf(c.fondsReno/12)}</td></tr>
+            <tr class="total"><td>Coût total de détention</td><td class="r num">${chf(c.detentionAn)}</td><td class="r num">${chf(c.detentionAn/12)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Postes de coût annuel</h3></div>
+        <div class="chart-wrap h-md"><canvas id="chCashBar"></canvas></div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px">${note('Amortissement indirect', `Le montant d'amortissement de <b>${chf(c.amort)}/an</b> n'éteint pas la dette : il alimente les contrats <b>3e pilier A</b> investis en bourse. La dette reste constante (intérêts maximaux → déduction fiscale maximale), et le capital 3a constitué remboursera le 2e rang au terme.`)}</div>`;
+  buildCashBar(c);
+}
+
+/* ---------- E.3 CALENDRIER ---------- */
+function renderCalendrier(){
+  const c=calc(), s=state, today=todayISO();
+  const rows=[];
+  s.tranches.forEach((t,i)=>{ rows.push({date:t.echeance, type:'Échéance tranche', label:`Tranche ${i+1} — ${chf(t.montant)} @ ${pct(t.taux,2)} (${t.type})`, jours:daysBetween(today,t.echeance), action:`<button class="btn btn-soft btn-sm" onclick="goRenegocier()">Renégocier</button>`}); });
+  const nextVers=nextAnniversary(s.meta.dateAcquisition);
+  rows.push({date:nextVers, type:'Versement 3a', label:`Versement annuel ${chf(c.versement3aTotal)} (amortissement indirect)`, jours:daysBetween(today,nextVers), action:'—'});
+  const lastEntry=s.historique.length?[...s.historique].sort((a,b)=>b.date.localeCompare(a.date))[0].date:null;
+  const nextSaisie=lastEntry?addMonths(lastEntry,6):today;
+  rows.push({date:nextSaisie, type:'Saisie 3a recommandée', label:lastEntry?`6 mois après la dernière saisie (${fmtDate(lastEntry)})`:'Première saisie à effectuer', jours:daysBetween(today,nextSaisie), action:`<button class="btn btn-soft btn-sm" onclick="switchTab('projections')">Saisir</button>`});
+  rows.sort((a,b)=>a.date.localeCompare(b.date));
+  const joursPill=d=>d<0?`<span class="pill warn">échu · ${Math.abs(d)} j</span>`:(d<90?`<span class="pill warn">${d} j</span>`:`<span class="pill ok">${d} j</span>`);
+  document.getElementById('calendrierBody').innerHTML=`
+    <div class="card">
+      <div class="card-head"><h3>Échéances &amp; rappels</h3><span class="card-note">triés par date</span></div>
+      <table class="data">
+        <thead><tr><th>Date</th><th>Type</th><th>Détail</th><th class="r">Compte à rebours</th><th>Action</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr><td class="num">${fmtDate(r.date)}</td><td>${r.type}</td><td>${r.label}</td><td class="r">${joursPill(r.jours)}</td><td>${r.action}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Temps restant avant échéance des tranches</h3></div>
+      <div class="chart-wrap h-sm"><canvas id="chCalBar"></canvas></div>
+    </div>`;
+  buildCalBar();
+}
+function nextAnniversary(iso){ if(!iso) return todayISO(); const base=new Date(iso), now=new Date(); const d=new Date(now.getFullYear(),base.getMonth(),base.getDate()); if(d<now) d.setFullYear(now.getFullYear()+1); return d.toISOString().slice(0,10); }
+function goRenegocier(){ switchTab('parametres'); setTimeout(()=>toast('Modifiez le taux de la tranche dans la table.'),200); }
+
+/* ---------- E.4 PROJECTIONS & 3a ---------- */
+function renderProjections(){
+  const c=calc(), s=state, cmp=compareSeries(s.rendement), reals=realTotals();
+  const valeurReelle=reals.length?reals[reals.length-1].value:0;
+  const cibleSerie=projectionSeries({c, versement3aTotal:c.versement3aTotal}, s.rendement);
+  const projFinale=cibleSerie.proj[cibleSerie.proj.length-1];
+  document.getElementById('projectionsBody').innerHTML=`
+    <div class="grid kpis">
+      <div class="kpi accent"><div class="kpi-label">Objectif 2e rang</div><div class="kpi-value num">${chf(c.r2)}</div><div class="kpi-sub">à constituer sur ${cmp.horizon} ans</div></div>
+      <div class="kpi"><div class="kpi-label">Versements 3a / an</div><div class="kpi-value num">${chf(c.versement3aTotal)}</div><div class="kpi-sub">${s.contrats.map(x=>x.titulaire).join(' + ')}</div></div>
+      <div class="kpi pos"><div class="kpi-label">Projection au terme @ ${pct(s.rendement,1)}</div><div class="kpi-value num">${chf(projFinale)}</div><div class="kpi-sub">intérêts composés annuels</div></div>
+      <div class="kpi ink"><div class="kpi-label">Valeur réelle saisie</div><div class="kpi-value num">${reals.length?chf(valeurReelle):'—'}</div><div class="kpi-sub">${reals.length?fmtDate(reals[reals.length-1].date):'aucune saisie'}</div></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Suivi vivant du capital 3a — amortissement indirect</h3></div>
+      <div class="slider-row mb12">
+        <label>Rendement annuel supposé des fonds</label>
+        <input type="range" min="-2" max="10" step="0.5" value="${s.rendement}" oninput="onRendement(this.value)" />
+        <span class="slider-val" id="rendVal">${pct(s.rendement,1)}</span>
+      </div>
+      <div class="chart-wrap h-lg"><canvas id="chProj"></canvas></div>
+      <div class="legend">
+        <span><i style="color:var(--muted-2)" class="dash"></i> Cible (versements à 0 %)</span>
+        <span><i style="background:var(--accent)"></i> Projection @ ${pct(s.rendement,1)}</span>
+        <span><i style="background:var(--primary)"></i> Objectif 2e rang</span>
+        <span><i style="background:var(--neg)"></i> Valeurs réelles saisies</span>
+      </div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:18px; align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Saisir une valeur de contrat</h3><span class="card-note">historique append-only</span></div>
+        <div class="fields-grid">
+          <div class="field"><label>Date</label><input type="date" id="hDate" value="${todayISO()}" /></div>
+          <div class="field"><label>Contrat</label><select id="hContrat">${s.contrats.map(x=>`<option value="${x.id}">${x.titulaire}${x.banque?' — '+x.banque:''}</option>`).join('')}</select></div>
+          <div class="field"><label>Valeur CHF</label><input type="number" id="hValeur" placeholder="ex. 7300" min="0" step="1" /></div>
+        </div>
+        <button class="btn btn-primary" onclick="addHistorique()">${icon('plus')} Ajouter au suivi</button>
+        <div style="margin-top:14px">${note('Append-only', `Chaque saisie crée une nouvelle ligne horodatée. Aucune valeur antérieure n'est jamais écrasée — l'historique complet est conservé. Une saisie ne peut être que <b>supprimée explicitement</b>.`)}</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Historique des valeurs</h3><span class="card-note">${s.historique.length} saisie(s)</span></div>
+        <div style="max-height:330px; overflow:auto">
+        <table class="data">
+          <thead><tr><th>Date</th><th>Contrat</th><th class="r">Valeur</th><th></th></tr></thead>
+          <tbody>${s.historique.length?[...s.historique].sort((a,b)=>b.date.localeCompare(a.date)).map(h=>{ const ct=s.contrats.find(x=>x.id===h.contratId); return `<tr><td class="num">${fmtDate(h.date)}</td><td>${ct?ct.titulaire:'—'}</td><td class="r num">${chf(h.valeur)}</td><td class="r"><button class="btn btn-danger btn-sm btn-icon" onclick="delHistorique('${h.id}')" title="Supprimer">${icon('x',15)}</button></td></tr>`; }).join(''):'<tr><td colspan="4" class="empty">Aucune valeur saisie pour le moment.</td></tr>'}</tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="section-title">Amortissement direct vs indirect (sur ${cmp.horizon} ans)</h3>
+    <div class="grid cols-2" style="align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Intérêts cumulés &amp; capital 3a</h3></div>
+        <div class="chart-wrap h-md"><canvas id="chCompare"></canvas></div>
+        <div class="legend">
+          <span><i style="background:var(--primary)"></i> Intérêts cumulés — indirect</span>
+          <span><i style="color:var(--muted-2)" class="dash"></i> Intérêts cumulés — direct</span>
+          <span><i style="background:var(--accent)"></i> Capital 3a constitué</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Bilan au terme</h3></div>
+        <table class="data">
+          <thead><tr><th></th><th class="r">Indirect</th><th class="r">Direct</th></tr></thead>
+          <tbody>
+            <tr><td>Dette finale</td><td class="r num">${chf(cmp.detteFinaleIndirect)}</td><td class="r num">${chf(cmp.detteFinaleDirect)}</td></tr>
+            <tr><td>Intérêts cumulés payés</td><td class="r num">${chf(cmp.interTotalIndirect)}</td><td class="r num">${chf(cmp.interTotalDirect)}</td></tr>
+            <tr><td>Capital 3a constitué @ ${pct(s.rendement,1)}</td><td class="r num">${chf(cmp.capitalFinal)}</td><td class="r num muted">—</td></tr>
+            <tr class="sub"><td>Surcoût d'intérêts de l'indirect</td><td class="r num" colspan="2" style="color:var(--neg)">${chf(cmp.surcout)}</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:14px">${note('Arbitrage', `L'indirect coûte <b>${chf(cmp.surcout)}</b> d'intérêts en plus, à mettre en regard de <b>l'avantage fiscal</b> (déduction des intérêts maximaux + déduction des versements 3a) et du <b>potentiel de rendement boursier</b> du capital 3a (${chf(cmp.capitalFinal)} projetés).`, true)}</div>
+      </div>
+    </div>`;
+  buildProjChart(); buildCompareChart();
+}
+function onRendement(v){ state.rendement=num(v); document.getElementById('rendVal').textContent=pct(state.rendement,1); save(); renderProjections(); }
+async function addHistorique(){
+  const date=document.getElementById('hDate').value||todayISO();
+  const contratId=document.getElementById('hContrat').value;
+  const valeur=num(document.getElementById('hValeur').value);
+  if(!contratId){ toast('Sélectionnez un contrat.'); return; }
+  if(valeur<=0){ toast('Saisissez une valeur positive.'); return; }
+  const entry={id:uid(), date, contratId, valeur};
+  if(MODE==='server'){ setSync('saving'); try{ await api('/historique',{method:'POST', body:JSON.stringify(entry)}); setSync('ok'); }catch(e){ setSync('error'); toast('Échec de l\'enregistrement serveur.'); return; } }
+  state.historique.push(entry);
+  if(MODE!=='server') save();
+  renderProjections(); toast('Valeur ajoutée à l\'historique.');
+}
+async function delHistorique(id){
+  if(MODE==='server'){ setSync('saving'); try{ await api('/historique/'+id,{method:'DELETE'}); setSync('ok'); }catch(e){ setSync('error'); toast('Échec de la suppression serveur.'); return; } }
+  state.historique=state.historique.filter(h=>h.id!==id);
+  if(MODE!=='server') save();
+  renderProjections(); toast('Saisie supprimée.');
+}
+
+/* ====================== F. GRAPHIQUES ====================== */
+const GRID='#EAEAEA', TXT='#8A8A8A';
+const COL={ink:'#1D2026', n60:'#4A4D54', n40:'#8A8A8A', n20:'#CFCFCF', coral:'#ED5847', coralSoft:'#F6ABA2', coralDeep:'#B82D1C'};
+Chart.defaults.font.family="'Satoshi','Switzer',sans-serif";
+Chart.defaults.font.size=12;
+Chart.defaults.color=TXT;
+Object.assign(Chart.defaults.plugins.tooltip,{backgroundColor:'#0B0B0B', padding:11, cornerRadius:8, titleFont:{family:"'Switzer'",weight:'600',size:12}, bodyFont:{family:"'Satoshi'",size:12.5}, displayColors:false, caretSize:5, titleColor:'#F5F5F5', bodyColor:'#CFCFCF'});
+
+function buildRecapDonut(c){
+  destroyChart('recapDonut'); const s=state;
+  const data=[{l:'Hypothèque',v:c.hyp,col:COL.ink},{l:'LPP — Kevin',v:num(s.fp.lppKevin),col:COL.n60},{l:'LPP — Aurélia',v:num(s.fp.lppAurelia),col:COL.n40},{l:'3a (fonds propres)',v:num(s.fp.troisA),col:COL.coral},{l:'Cash (acomptes)',v:c.sousCash,col:COL.coralSoft}].filter(d=>d.v>0);
+  charts.recapDonut=new Chart(document.getElementById('chRecapDonut'),{type:'doughnut',
+    data:{labels:data.map(d=>d.l), datasets:[{data:data.map(d=>d.v), backgroundColor:data.map(d=>d.col), borderWidth:3, borderColor:'#fff', hoverOffset:6}]},
+    options:{responsive:true, maintainAspectRatio:false, cutout:'66%',
+      plugins:{legend:{position:'bottom', labels:{padding:15, usePointStyle:true, pointStyle:'circle', boxWidth:8, font:{size:12}}}, tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${chf(ctx.raw)}`}}}}});
+}
+function buildCashBar(c){
+  destroyChart('cashBar');
+  charts.cashBar=new Chart(document.getElementById('chCashBar'),{type:'bar',
+    data:{labels:['Intérêts','Amort. (3a)','Charges PPE','Rénovation'], datasets:[{data:[c.interetsAnnuels,c.amort,c.chargesPPE,c.fondsReno], backgroundColor:[COL.ink,COL.coral,COL.n60,COL.n20], borderRadius:8, maxBarThickness:58}]},
+    options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${chf(ctx.raw)}`}}}, scales:{y:{border:{display:false}, grid:{color:GRID}, ticks:{callback:v=>fmtNum.format(v)}}, x:{border:{display:false}, grid:{display:false}}}}});
+}
+function buildCalBar(){
+  destroyChart('calBar'); const today=todayISO();
+  const labels=state.tranches.map((t,i)=>`Tranche ${i+1}`);
+  const jours=state.tranches.map(t=>Math.max(0,daysBetween(today,t.echeance)));
+  charts.calBar=new Chart(document.getElementById('chCalBar'),{type:'bar',
+    data:{labels, datasets:[{data:jours, backgroundColor:jours.map(j=>j<90?COL.coral:COL.ink), borderRadius:8, maxBarThickness:30}]},
+    options:{indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtNum.format(ctx.raw)} jours restants`}}}, scales:{x:{border:{display:false}, grid:{color:GRID}, ticks:{callback:v=>fmtNum.format(v)+' j'}}, y:{border:{display:false}, grid:{display:false}}}}});
+}
+function buildProjChart(){
+  destroyChart('proj'); const c=calc(), s=state;
+  const ser=projectionSeries({c, versement3aTotal:c.versement3aTotal}, s.rendement);
+  const baseYear=new Date(s.meta.dateAcquisition).getFullYear()||2026;
+  const labels=[]; for(let y=0;y<=ser.horizon;y++) labels.push(baseYear+y);
+  const reals=realTotals().map(r=>({x:baseYear+yearsBetween(s.meta.dateAcquisition,r.date), y:r.value}));
+  charts.proj=new Chart(document.getElementById('chProj'),{type:'line',
+    data:{labels, datasets:[
+      {label:'Cible (0 %)', data:ser.cible, borderColor:COL.n40, borderDash:[6,5], borderWidth:2, pointRadius:0, tension:.1, fill:false},
+      {label:'Projection', data:ser.proj, borderColor:COL.coral, backgroundColor:'rgba(237,88,71,.09)', borderWidth:2.5, pointRadius:0, tension:.25, fill:true},
+      {label:'Objectif 2e rang', data:labels.map(()=>c.r2), borderColor:COL.ink, borderDash:[3,4], borderWidth:1.5, pointRadius:0, fill:false},
+      {label:'Valeurs réelles', data:reals, borderColor:COL.coralDeep, backgroundColor:COL.coralDeep, borderWidth:2.5, pointRadius:5, pointHoverRadius:7, pointBorderColor:'#fff', pointBorderWidth:1.5, showLine:true, tension:.1, parsing:false}
+    ]},
+    options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'nearest', intersect:false},
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${chf(ctx.parsed.y)}`}}},
+      scales:{x:{type:'linear', min:baseYear, max:baseYear+ser.horizon, border:{display:false}, grid:{color:GRID}, ticks:{stepSize:1, callback:v=>v}}, y:{border:{display:false}, grid:{color:GRID}, ticks:{callback:v=>fmtNum.format(v)}, beginAtZero:true}}}});
+}
+function buildCompareChart(){
+  destroyChart('compare'); const s=state, cmp=compareSeries(s.rendement);
+  const baseYear=new Date(s.meta.dateAcquisition).getFullYear()||2026;
+  const labels=[]; for(let y=0;y<=cmp.horizon;y++) labels.push(baseYear+y);
+  charts.compare=new Chart(document.getElementById('chCompare'),{type:'line',
+    data:{labels, datasets:[
+      {label:'Intérêts cumulés — indirect', data:cmp.interIndirect, borderColor:COL.ink, borderWidth:2.5, pointRadius:0, tension:.2},
+      {label:'Intérêts cumulés — direct', data:cmp.interDirect, borderColor:COL.n40, borderDash:[6,5], borderWidth:2, pointRadius:0, tension:.2},
+      {label:'Capital 3a constitué', data:cmp.capital3a, borderColor:COL.coral, backgroundColor:'rgba(237,88,71,.10)', borderWidth:2.5, pointRadius:0, tension:.25, fill:true}
+    ]},
+    options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${chf(ctx.parsed.y)}`}}},
+      scales:{x:{border:{display:false}, grid:{color:GRID}}, y:{border:{display:false}, grid:{color:GRID}, ticks:{callback:v=>fmtNum.format(v)}, beginAtZero:true}}}});
+}
+
+/* ====================== G. PARAMÈTRES ====================== */
+function fieldNum(path,label,opts={}){
+  const v=getPath(path);
+  return `<div class="field"><label>${label}${opts.badge?badge():''}</label><input type="number" step="${opts.step||'1'}" value="${v===null||v===undefined?'':v}" placeholder="${opts.ph||''}" oninput="setPath('${path}', this.value===''?null:parseFloat(this.value)); recalcLight()" />${opts.hint?`<span class="hint">${opts.hint}</span>`:''}</div>`;
+}
+function fieldText(path,label,opts={}){
+  const v=getPath(path)??'';
+  return `<div class="field"><label>${label}</label><input type="${opts.type||'text'}" value="${v}" oninput="setPath('${path}', this.value); recalcLight()" />${opts.hint?`<span class="hint">${opts.hint}</span>`:''}</div>`;
+}
+function getPath(p){ return p.split('.').reduce((o,k)=>o&&o[k],state); }
+function setPath(p,val){ const ks=p.split('.'); let o=state; for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=val; save(); }
+function recalcLight(){ renderHeader(); const a=document.querySelector('.nav-item.active'); renderByTab(a?a.dataset.tab:'parametres'); save(); }
+
+function renderParametres(){
+  const s=state;
+  document.getElementById('parametresBody').innerHTML=`
+    <div class="flex between center wrap gap12" style="margin-bottom:6px">
+      <p class="muted small" style="max-width:660px; margin:0">Toutes les valeurs sont éditables ; chaque modification recalcule et redessine immédiatement KPI, tableaux et graphiques. Sauvegarde automatique.</p>
+      <button class="btn btn-danger" onclick="resetAll()">${icon('reset')} Réinitialiser</button>
+    </div>
+
+    <h3 class="section-title">Bien &amp; propriétaires</h3>
+    <div class="card"><div class="fields-grid">
+      ${fieldText('meta.proprietaires','Propriétaires')}
+      ${fieldText('meta.bien','Bien')}
+      ${fieldText('meta.lieu','Lieu')}
+      ${fieldText('meta.dateAcquisition','Date d\'acquisition / livraison',{type:'date',hint:'à confirmer'})}
+    </div></div>
+
+    <h3 class="section-title">Prix d'acquisition</h3>
+    <div class="card"><div class="fields-grid">
+      ${fieldNum('prix.appartement','Appartement (hors places)')}
+      ${fieldNum('prix.placeCouverte','Place de parc couverte')}
+      ${fieldNum('prix.placeNonCouverte','Place de parc non couverte')}
+      ${fieldNum('prix.prixTotalActe','Prix total à l\'acte (places comprises)')}
+      ${fieldNum('prix.baseBancaire','Base bancaire (plan de financement)',{hint:'fixée à 1\'150\'000 pour anticiper des plus-values'})}
+    </div></div>
+
+    <h3 class="section-title">Financement</h3>
+    <div class="card"><div class="fields-grid">
+      ${fieldNum('fin.hypotheque','Hypothèque (crédit accordé)')}
+      ${fieldNum('fin.deuxiemeRang','2e rang (à amortir)',{badge:true,hint:'1er rang = hypothèque − 2e rang'})}
+      ${fieldNum('fin.amortAnnuel','Amortissement annuel')}
+      ${fieldNum('fin.dureeAmort','Durée d\'amortissement (ans)')}
+    </div></div>
+
+    <h3 class="section-title">Fonds propres</h3>
+    <div class="card"><div class="fields-grid">
+      ${fieldNum('fp.lppKevin','LPP — Kevin')}
+      ${fieldNum('fp.lppAurelia','LPP — Aurélia')}
+      ${fieldNum('fp.cashAcompte1','Cash — acompte 1 (18.03)')}
+      ${fieldNum('fp.cashAcompte2','Cash — acompte 2 (08.05)')}
+      ${fieldNum('fp.troisA','3a (solde des fonds propres)',{badge:true})}
+      ${fieldNum('fp.total','Total fonds propres exigé')}
+    </div></div>
+
+    <h3 class="section-title">Frais d'acquisition</h3>
+    <div class="card"><div class="fields-grid">
+      ${fieldNum('frais.notaire','Notaire + droits de mutation (FR)',{badge:true,ph:'à fournir'})}
+      ${fieldNum('frais.dossierBanque','Frais de dossier banque')}
+      ${fieldNum('frais.courtier','Commission courtier')}
+    </div></div>
+
+    <h3 class="section-title">Tranches hypothécaires ${badge()}</h3>
+    <div class="card">
+      <table class="data edit-table">
+        <thead><tr><th>Montant</th><th>Taux %</th><th>Type</th><th>Début</th><th>Échéance</th><th></th></tr></thead>
+        <tbody>${s.tranches.map(t=>`<tr>
+          <td><input type="number" value="${t.montant}" oninput="updTranche('${t.id}','montant',this.value)" /></td>
+          <td><input type="number" step="0.01" value="${t.taux}" oninput="updTranche('${t.id}','taux',this.value)" /></td>
+          <td><select onchange="updTranche('${t.id}','type',this.value)"><option ${t.type==='Fixe'?'selected':''}>Fixe</option><option ${t.type==='SARON'?'selected':''}>SARON</option></select></td>
+          <td><input type="date" value="${t.debut}" oninput="updTranche('${t.id}','debut',this.value)" /></td>
+          <td><input type="date" value="${t.echeance}" oninput="updTranche('${t.id}','echeance',this.value)" /></td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delTranche('${t.id}')">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
+      </table>
+      <button class="btn btn-soft btn-sm mt8" onclick="addTranche()">${icon('plus',15)} Ajouter une tranche</button>
+    </div>
+
+    <h3 class="section-title">Charges &amp; hypothèses</h3>
+    <div class="card"><div class="fields-grid">
+      ${fieldNum('charges.chargesPPE','Charges PPE courantes / an',{badge:true,ph:'à fournir'})}
+      ${fieldNum('charges.fondsReno','Fonds de rénovation / an',{badge:true,ph:'à fournir'})}
+      ${fieldNum('charges.tauxTheorique','Taux théorique (tenue des charges) %',{step:'0.1'})}
+      ${fieldNum('charges.entretienPct','Entretien théorique (% de la base) %',{step:'0.1'})}
+      ${fieldNum('charges.revenuBrut','Revenu brut annuel du ménage',{ph:'optionnel'})}
+    </div></div>
+
+    <h3 class="section-title">Contrats 3a (amortissement indirect)</h3>
+    <div class="card">
+      <table class="data edit-table">
+        <thead><tr><th>Titulaire</th><th>Banque</th><th>Versement annuel</th><th></th></tr></thead>
+        <tbody>${s.contrats.map(c=>`<tr>
+          <td><input value="${c.titulaire}" oninput="updContrat('${c.id}','titulaire',this.value)" /></td>
+          <td><input value="${c.banque||''}" placeholder="banque / fonds" oninput="updContrat('${c.id}','banque',this.value)" /></td>
+          <td><input type="number" value="${c.versement}" oninput="updContrat('${c.id}','versement',this.value)" /></td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delContrat('${c.id}')">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
+      </table>
+      <button class="btn btn-soft btn-sm mt8" onclick="addContrat()">${icon('plus',15)} Ajouter un contrat</button>
+    </div>`;
+}
+function addTranche(){ state.tranches.push({id:uid(),montant:0,taux:1.5,type:'Fixe',debut:todayISO(),echeance:addMonths(todayISO(),60)}); save(); renderAll(); }
+function delTranche(id){ if(state.tranches.length<=1){toast('Au moins une tranche est requise.');return;} state.tranches=state.tranches.filter(t=>t.id!==id); save(); renderAll(); }
+function updTranche(id,k,v){ const t=state.tranches.find(x=>x.id===id); if(!t)return; t[k]=(k==='montant'||k==='taux')?num(v):v; save(); renderRecapDeps(); }
+function addContrat(){ state.contrats.push({id:uid(),titulaire:'Nouveau',banque:'',versement:0}); save(); renderAll(); }
+function delContrat(id){ if(state.contrats.length<=1){toast('Au moins un contrat est requis.');return;} state.contrats=state.contrats.filter(c=>c.id!==id); save(); renderAll(); }
+function updContrat(id,k,v){ const c=state.contrats.find(x=>x.id===id); if(!c)return; c[k]=(k==='versement')?num(v):v; save(); renderRecapDeps(); }
+function renderRecapDeps(){ renderHeader(); renderRecap(); renderCashflow(); renderCalendrier(); renderProjections(); save(); }
+
+async function resetAll(){
+  if(!confirm('Réinitialiser toutes les valeurs par défaut ? L\'historique 3a et toutes vos saisies seront effacés.')) return;
+  if(MODE==='server'){ setSync('saving'); try{ for(const h of [...state.historique]) await api('/historique/'+h.id,{method:'DELETE'}); state=defaultData(); await api('/config',{method:'PUT', body:JSON.stringify(configPayload())}); setSync('ok'); }catch(e){ setSync('error'); toast('Échec de la réinitialisation serveur.'); return; } }
+  else { state=defaultData(); save(); }
+  renderAll(); switchTab('recap'); toast('Données réinitialisées.');
+}
+
+/* ====================== H. NAVIGATION & EXPORTS ====================== */
+const TITLES={recap:'Vue d\'ensemble', cashflow:'Cash-flow', calendrier:'Calendrier', projections:'Projections & 3a', parametres:'Paramètres'};
+function renderByTab(tab){ ({recap:renderRecap, cashflow:renderCashflow, calendrier:renderCalendrier, projections:renderProjections, parametres:renderParametres}[tab]||(()=>{}))(); }
+function switchTab(tab){
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
+  document.getElementById('pageTitle').textContent=TITLES[tab]||'';
+  document.getElementById('printTitle').textContent=TITLES[tab]||'';
+  renderByTab(tab);
+  const ct=document.querySelector('.content'); if(ct) ct.scrollTo({top:0, behavior:'smooth'});
+  document.getElementById('app').classList.remove('nav-open');
+}
+document.getElementById('nav').addEventListener('click', e=>{ const b=e.target.closest('.nav-item'); if(b) switchTab(b.dataset.tab); });
+
+function exportExcel(){
+  const c=calc(), s=state;
+  const wb=XLSX.utils.book_new();
+  const recap=[['Tableau de bord patrimonial — '+s.meta.lieu],['Propriétaires',s.meta.proprietaires],['Bien',s.meta.bien],[],
+    ['Prix acquisition (acte)',num(s.prix.prixTotalActe)],['Base bancaire',c.base],['Hypothèque',c.hyp],['1er rang',c.r1],['2e rang',c.r2],['LTV %',+c.ltv.toFixed(2)],[],
+    ['Fonds propres total',c.fpTotal],['  LPP',c.sousLPP],['  Cash',c.sousCash],['  3a',num(s.fp.troisA)],[],
+    ['Frais total',c.fraisTotal],['Coût total opération',c.coutOperation],[],
+    ['Charge théorique annuelle',c.chargeTheoAnnuelle],['Taux d\'effort %',c.tauxEffort===null?'':+c.tauxEffort.toFixed(2)]];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(recap), 'Récap');
+  const cash=[['Poste','Annuel CHF','Mensuel CHF'],['Intérêts',c.interetsAnnuels,c.interetsAnnuels/12],['Amortissement (3a)',c.amort,c.amort/12],['Charges PPE',c.chargesPPE,c.chargesPPE/12],['Rénovation',c.fondsReno,c.fondsReno/12],['Coût total détention',c.detentionAn,c.detentionAn/12]];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cash), 'Cash-flow');
+  const tr=[['Montant','Taux %','Type','Début','Échéance'],...s.tranches.map(t=>[num(t.montant),num(t.taux),t.type,t.debut,t.echeance])];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tr), 'Tranches');
+  const hi=[['Date','Contrat','Valeur CHF'],...[...s.historique].sort((a,b)=>a.date.localeCompare(b.date)).map(h=>{ const ct=s.contrats.find(x=>x.id===h.contratId); return [h.date, ct?ct.titulaire:'', num(h.valeur)]; })];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hi), 'Historique 3a');
+  XLSX.writeFile(wb, `dashboard-immo-${todayISO()}.xlsx`);
+  toast('Classeur Excel généré (4 feuilles).');
+}
+function exportPDF(){ window.print(); }
+window.addEventListener('beforeprint', ()=>{ Object.values(charts).forEach(ch=>{ try{ch.resize();}catch(e){} }); });
+window.addEventListener('afterprint', ()=>{ Object.values(charts).forEach(ch=>{ try{ch.resize();}catch(e){} }); });
+
+/* ====================== INIT ====================== */
 boot();
 </script>
 </body>

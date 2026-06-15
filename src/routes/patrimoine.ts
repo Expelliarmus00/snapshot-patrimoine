@@ -42,6 +42,7 @@ export const patrimoineRoutes: FastifyPluginAsync = async (app) => {
     const body = { ...((request.body as Record<string, unknown>) || {}) };
     delete body.historique;
     delete body._auth;
+    delete body._user;
     await prisma.patrimoineConfig.upsert({
       where: { id: CONFIG_ID },
       create: { id: CONFIG_ID, json: JSON.stringify(body) },
