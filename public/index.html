@@ -218,6 +218,13 @@ table.data tr.total:hover td,table.data tr.sub:hover td{background:transparent;}
 input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5px;}
 .slider-val{font-family:var(--font-display); font-weight:600; font-size:23px; color:var(--accent); font-variant-numeric:tabular-nums; min-width:72px;}
 
+/* jauge de progression */
+.progress{height:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:7px; overflow:hidden;}
+.progress > i{display:block; height:100%; background:var(--accent); border-radius:7px 0 0 7px; transition:width .4s ease;}
+.progress.done > i{background:var(--pos);}
+.gauge-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+.gauge-pct{font-family:var(--font-display); font-weight:600; font-size:21px; color:var(--accent); font-variant-numeric:tabular-nums;}
+
 /* légende */
 .legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12px; font-weight:500; color:var(--ink-2); margin-top:14px;}
 .legend span{display:inline-flex; align-items:center; gap:8px;}
@@ -413,9 +420,11 @@ function defaultData(){
     charges:{ chargesPPE:null, fondsReno:null, tauxTheorique:5, entretienPct:1, revenuBrut:null },
     contrats:[ {id:uid(), titulaire:'Kevin', banque:'', versement:7258}, {id:uid(), titulaire:'Aurélia', banque:'', versement:3042} ],
     historique:[],
+    valeursBien:[],      // réévaluations réelles du bien dans le temps [{id,date,valeur}]
     rendement:4,
     rendementBien:1.5,   // % d'appréciation annuelle estimée du bien
-    tauxRenovRisk:3.5    // taux hypothétique au renouvellement (stress-test)
+    tauxRenovRisk:3.5,   // taux hypothétique au renouvellement (stress-test)
+    plafond3a:7258       // plafond annuel déductible 3a (salarié avec LPP)
   };
 }
 // Apports par défaut (LPP nominatif ; cash & 3a répartis 50/50 — à ajuster)
@@ -646,6 +655,17 @@ function realTotals(){
   const s=state, dates=[...new Set(s.historique.map(h=>h.date))].sort();
   return dates.map(d=>{ let total=0; s.contrats.forEach(c=>{ const past=s.historique.filter(h=>h.contratId===c.id && h.date<=d).sort((a,b)=>a.date.localeCompare(b.date)); if(past.length) total+=num(past[past.length-1].valeur); }); return {date:d, value:total}; });
 }
+// Réévaluations réelles du bien, triées par date
+function valeursBienSorted(){ return [...(Array.isArray(state.valeursBien)?state.valeursBien:[])].sort((a,b)=>a.date.localeCompare(b.date)); }
+// Dernière valeur réelle saisie, sinon prix à l'acte
+function valeurReelleActuelle(){ const v=valeursBienSorted(); return v.length?num(v[v.length-1].valeur):num(state.prix.prixTotalActe); }
+// Versements 3a agrégés par titulaire (pour le plafond)
+function versementsParTitulaire(){
+  const m=new Map();
+  (state.contrats||[]).forEach(c=>{ const k=(c.titulaire||'—').trim(); m.set(k,(m.get(k)||0)+num(c.versement)); });
+  return [...m.entries()].map(([titulaire,versement])=>({titulaire,versement}));
+}
+
 function compareSeries(rendement){
   const s=state, c=calc(), horizon=num(s.fin.dureeAmort), tx=c.tauxMoyen/100, amort=num(s.fin.amortAnnuel);
   const interIndirect=[], interDirect=[], capital3a=[]; let cumInd=0,cumDir=0,dette=c.hyp,cap=0; const versement=c.versement3aTotal;
@@ -673,7 +693,7 @@ function renderRecap(){
   const c=calc(), s=state;
   const ltvWarn=c.ltv>80, effortWarn=c.tauxEffort!==null && c.tauxEffort>33;
   const horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
-  const fortuneNetteFin=num(s.prix.prixTotalActe)*Math.pow(1+rb,horizon)-c.hyp;
+  const fortuneNetteFin=c.base*Math.pow(1+rb,horizon)-c.hyp;
   document.getElementById('recapBody').innerHTML=`
     <div class="grid kpis">
       <div class="kpi ink"><div class="kpi-label">Valeur du bien</div><div class="kpi-value num">${chf(s.prix.prixTotalActe)}</div><div class="kpi-sub">prix à l'acte</div></div>
@@ -857,12 +877,42 @@ function renderProjections(){
   const valeurReelle=reals.length?reals[reals.length-1].value:0;
   const cibleSerie=projectionSeries({c, versement3aTotal:c.versement3aTotal}, s.rendement);
   const projFinale=cibleSerie.proj[cibleSerie.proj.length-1];
+  // #6 — Jauge objectif 2e rang : progression du capital 3a réel vs objectif, et date estimée d'atteinte
+  const progrPct=c.r2>0?Math.min(100, valeurReelle/c.r2*100):0;
+  let cap=valeurReelle, yrs=0; const vers=c.versement3aTotal, rdt=num(s.rendement)/100;
+  while(cap<c.r2 && yrs<60){ cap=cap*(1+rdt)+vers; yrs++; }
+  const atteintAnnee = cap>=c.r2 ? new Date().getFullYear()+yrs : null;
+  // #7 — Plafond 3a : versements agrégés par titulaire vs plafond déductible
+  const plafond=num(s.plafond3a), parTit=versementsParTitulaire();
+  const margeTotale=parTit.reduce((a,t)=>a+Math.max(0,plafond-t.versement),0);
   document.getElementById('projectionsBody').innerHTML=`
     <div class="grid kpis">
       <div class="kpi accent"><div class="kpi-label">Objectif 2e rang</div><div class="kpi-value num">${chf(c.r2)}</div><div class="kpi-sub">à constituer sur ${cmp.horizon} ans</div></div>
       <div class="kpi"><div class="kpi-label">Versements 3a / an</div><div class="kpi-value num">${chf(c.versement3aTotal)}</div><div class="kpi-sub">${s.contrats.map(x=>x.titulaire).join(' + ')}</div></div>
       <div class="kpi pos"><div class="kpi-label">Projection au terme @ ${pct(s.rendement,1)}</div><div class="kpi-value num">${chf(projFinale)}</div><div class="kpi-sub">intérêts composés annuels</div></div>
       <div class="kpi ink"><div class="kpi-label">Valeur réelle saisie</div><div class="kpi-value num">${reals.length?chf(valeurReelle):'—'}</div><div class="kpi-sub">${reals.length?fmtDate(reals[reals.length-1].date):'aucune saisie'}</div></div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:18px; align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Progression — objectif 2e rang</h3><span class="card-note">capital 3a réel vs ${chf(c.r2)}</span></div>
+        <div class="gauge-head"><span class="gauge-pct">${pct(progrPct,0)}</span><span class="muted small">${chf(valeurReelle)} / ${chf(c.r2)}</span></div>
+        <div class="progress ${progrPct>=100?'done':''}"><i style="width:${progrPct.toFixed(1)}%"></i></div>
+        <table class="data" style="margin-top:14px"><tbody>
+          <tr><td>Capital 3a constitué (réel)</td><td class="r num">${chf(valeurReelle)}</td></tr>
+          <tr><td>Reste à constituer</td><td class="r num">${chf(Math.max(0,c.r2-valeurReelle))}</td></tr>
+          <tr class="sub"><td>Atteinte estimée @ ${pct(s.rendement,1)}</td><td class="r num">${atteintAnnee?(atteintAnnee<=new Date().getFullYear()?'objectif atteint':atteintAnnee):'au-delà de l\'horizon'}</td></tr>
+        </tbody></table>
+        ${reals.length?'':`<div style="margin-top:12px">${note('Astuce', `Saisissez la valeur réelle de vos contrats 3a ci-dessous pour suivre la progression réelle (sinon basée sur 0).`)}</div>`}
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Plafond 3a déductible</h3><span class="card-note">${chf(plafond)} / personne / an</span></div>
+        <table class="data">
+          <thead><tr><th>Titulaire</th><th class="r">Versement</th><th class="r">Plafond</th><th class="r">Marge</th></tr></thead>
+          <tbody>${parTit.map(t=>{ const marge=plafond-t.versement, under=marge>0.5; return `<tr><td>${esc(t.titulaire)}</td><td class="r num">${chf(t.versement)}</td><td class="r num">${chf(plafond)}</td><td class="r">${under?`<span class="pill warn">${chf(marge)} libre</span>`:'<span class="pill ok">max</span>'}</td></tr>`; }).join('')}</tbody>
+        </table>
+        <div style="margin-top:12px">${margeTotale>0.5?note('Déduction non utilisée', `Il reste <b>${chf(margeTotale)}</b> de marge déductible cette année. Augmenter les versements (jusqu'au plafond) maximise l'économie d'impôt <span class="muted small">(modifiez le plafond dans Paramètres)</span>.`,true):note('Plafond atteint', `Les versements atteignent le plafond déductible — l'avantage fiscal 3a est maximisé.`)}</div>
+      </div>
     </div>
 
     <div class="card" style="margin-top:18px">
@@ -953,13 +1003,14 @@ function onTauxRenov(v){ state.tauxRenovRisk=num(v); const el=document.getElemen
 function renderScenarios(){
   const c=calc(), s=state;
   const horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
-  const valFin=num(s.prix.prixTotalActe)*Math.pow(1+rb, horizon);
-  const detteFin=c.hyp, equiteFin=valFin-detteFin, equiteAct=num(s.prix.prixTotalActe)-c.hyp;
+  const valFin=c.base*Math.pow(1+rb, horizon);
+  const detteFin=c.hyp, equiteFin=valFin-detteFin, equiteAct=c.base-c.hyp;
   const anneeTerme=(new Date(s.meta.dateAcquisition||'').getFullYear()+horizon)||'—';
-  const ltvAct=num(s.prix.prixTotalActe)>0?c.hyp/num(s.prix.prixTotalActe)*100:0;
+  const ltvAct=c.ltv;
   const ltvFin=valFin>0?c.hyp/valFin*100:0;
   const ltvCible=80;                                  // LTV cible pour un réhaussement
   const rehausseFin=Math.max(0, valFin*ltvCible/100 - c.hyp);   // cash dégageable au terme à LTV 80 %
+  const vb=valeursBienSorted();
   document.getElementById('scenariosBody').innerHTML=`
     <div class="grid kpis">
       <div class="kpi pos"><div class="kpi-label">Fortune nette projetée</div><div class="kpi-value num">${chf(equiteFin)}</div><div class="kpi-sub">dans ${horizon} ans (${anneeTerme})</div></div>
@@ -978,6 +1029,7 @@ function renderScenarios(){
           <span><i style="color:var(--muted-2)" class="dash"></i> Dette résiduelle</span>
           <span><i style="background:var(--accent)"></i> Fortune nette (équité)</span>
           <span><i style="color:var(--neg)" class="dash"></i> LTV (axe droit, %)</span>
+          <span><i style="background:var(--neg)"></i> Valeur réelle saisie</span>
         </div>
       </div>
       <div class="card">
@@ -989,7 +1041,27 @@ function renderScenarios(){
           <tr><td>LTV au terme</td><td class="r num">${pct(ltvFin)}</td></tr>
           <tr><td>Gain d'équité sur ${horizon} ans</td><td class="r num" style="color:var(--accent)">${chf(equiteFin-equiteAct)}</td></tr>
         </tbody></table>
-        <div style="margin-top:14px">${note('Réhaussement de dette', `La valeur monte et la dette reste constante → la <b>LTV baisse de ${pct(ltvAct)} à ${pct(ltvFin)}</b> en ${horizon} ans. Pour revenir à une LTV de <b>${ltvCible} %</b>, vous pourriez ré-emprunter jusqu'à <b>${chf(rehausseFin)}</b> de cash au terme (survolez le graphique pour la LTV année par année).`)}</div>
+        <div style="margin-top:14px">${note('Réhaussement de dette', `La valeur monte et la dette reste constante → la <b>LTV baisse de ${pct(ltvAct)} à ${pct(ltvFin)}</b> en ${horizon} ans. Pour revenir à une LTV de <b>${ltvCible} %</b>, vous pourriez ré-emprunter jusqu'à <b>${chf(rehausseFin)}</b> de cash au terme (survolez le graphique pour la LTV et le réhaussement année par année).`)}</div>
+      </div>
+    </div>
+
+    <h3 class="section-title">Valeur réelle du bien — réévaluations</h3>
+    <div class="grid cols-2" style="align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Saisir une réévaluation</h3><span class="card-note">estimation / expertise</span></div>
+        <div class="fields-grid">
+          <div class="field"><label>Date</label><input type="date" id="vbDate" value="${todayISO()}" /></div>
+          <div class="field"><label>Valeur estimée CHF</label><input type="number" id="vbVal" placeholder="ex. 1180000" min="0" step="1000" /></div>
+        </div>
+        <button class="btn btn-primary" onclick="addValeurBien()">${icon('plus')} Ajouter</button>
+        <div style="margin-top:14px">${note('Pourquoi', `Chaque réévaluation apparaît sur le graphique (point) et met à jour la <b>LTV réelle</b>. Utile pour décider d'un réhaussement de dette quand la valeur a réellement monté.`)}</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Historique des valeurs</h3><span class="card-note">${vb.length} saisie(s)</span></div>
+        ${vb.length?`<div class="table-scroll" style="max-height:280px;overflow:auto"><table class="data">
+          <thead><tr><th>Date</th><th class="r">Valeur</th><th class="r">LTV réelle</th><th></th></tr></thead>
+          <tbody>${[...vb].sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<tr><td class="num">${fmtDate(r.date)}</td><td class="r num">${chf(r.valeur,true)}</td><td class="r num">${num(r.valeur)>0?pct(c.hyp/num(r.valeur)*100):'—'}</td><td class="r"><button class="btn btn-danger btn-sm btn-icon" onclick="delValeurBien('${esc(r.id)}')" title="Supprimer">${icon('x',15)}</button></td></tr>`).join('')}</tbody>
+        </table></div>`:'<div class="empty">Aucune réévaluation saisie. La projection part du prix à l\'acte.</div>'}
       </div>
     </div>
 
@@ -1032,6 +1104,23 @@ function renderScenarios(){
     </div>`;
   buildFortuneNetteChart(c);
 }
+
+/* --- Valeur réelle du bien (réévaluations, stockées dans la config) --- */
+function addValeurBien(){
+  const date=document.getElementById('vbDate').value||todayISO();
+  const valeur=num(document.getElementById('vbVal').value);
+  if(valeur<=0){ toast('Saisissez une valeur positive.'); return; }
+  state.valeursBien=Array.isArray(state.valeursBien)?state.valeursBien:[];
+  state.valeursBien.push({id:uid(), date, valeur});
+  save(); renderScenarios(); renderRecap(); toast('Réévaluation ajoutée.');
+}
+function delValeurBien(id){
+  const snap=(state.valeursBien||[]).find(v=>v.id===id);
+  state.valeursBien=(state.valeursBien||[]).filter(v=>v.id!==id);
+  save(); renderScenarios(); renderRecap();
+  toast('Réévaluation supprimée.', snap?()=>{ state.valeursBien.push(snap); save(); renderScenarios(); renderRecap(); }:null);
+}
+
 async function addHistorique(){
   const date=document.getElementById('hDate').value||todayISO();
   const contratId=document.getElementById('hContrat').value;
@@ -1109,24 +1198,31 @@ function buildFortuneNetteChart(c){
   destroyChart('fortuneNette');
   const s=state, horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
   const baseYear=new Date(s.meta.dateAcquisition).getFullYear()||2026;
+  const ltvCible=80;
   const labels=[], valeurs=[], dettes=[], equites=[], ltvs=[];
   for(let y=0;y<=horizon;y++){
     labels.push(baseYear+y);
-    const v=num(s.prix.prixTotalActe)*Math.pow(1+rb,y);
+    const v=c.base*Math.pow(1+rb,y);   // valeur projetée sur la base bancaire (LTV cohérente à 80 %)
     const d=c.hyp; // indirect : dette constante
     valeurs.push(v); dettes.push(d); equites.push(v-d); ltvs.push(v>0?d/v*100:0);
   }
+  // Points de valeur réelle saisis (réévaluations)
+  const reals=valeursBienSorted().map(r=>({x:baseYear+yearsBetween(s.meta.dateAcquisition,r.date), y:num(r.valeur)}));
   charts.fortuneNette=new Chart(document.getElementById('chFortuneNette'),{type:'line',
     data:{labels, datasets:[
       {label:'Valeur du bien',data:valeurs,borderColor:COL.ink,backgroundColor:'rgba(29,32,38,.06)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true,yAxisID:'y'},
       {label:'Dette résiduelle',data:dettes,borderColor:COL.n40,borderDash:[6,5],borderWidth:2,pointRadius:0,fill:false,yAxisID:'y'},
       {label:'Fortune nette',data:equites,borderColor:COL.coral,backgroundColor:'rgba(237,88,71,.10)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true,yAxisID:'y'},
-      {label:'LTV',data:ltvs,borderColor:COL.coralDeep,borderWidth:2,borderDash:[2,3],pointRadius:0,pointHoverRadius:4,tension:.2,fill:false,yAxisID:'y1'}
+      {label:'LTV',data:ltvs,borderColor:COL.coralDeep,borderWidth:2,borderDash:[2,3],pointRadius:0,pointHoverRadius:4,tension:.2,fill:false,yAxisID:'y1'},
+      {label:'Valeur réelle',data:reals,borderColor:COL.coralDeep,backgroundColor:COL.coralDeep,borderWidth:2,pointRadius:5,pointHoverRadius:7,pointBorderColor:'#fff',pointBorderWidth:1.5,showLine:true,tension:.1,parsing:false,yAxisID:'y'}
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='LTV'?` LTV : ${ctx.parsed.y.toFixed(1).replace('.',',')} %`:` ${ctx.dataset.label} : ${chf(ctx.parsed.y)}`}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{
+        label:ctx=>ctx.dataset.label==='LTV'?` LTV : ${ctx.parsed.y.toFixed(1).replace('.',',')} %`:` ${ctx.dataset.label} : ${chf(ctx.parsed.y)}`,
+        afterBody:items=>{ const it=items.find(i=>i.dataset.label==='Valeur du bien'); if(!it) return ''; const v=valeurs[it.dataIndex]; const reh=Math.max(0, v*ltvCible/100 - c.hyp); return reh>0?`Réhaussement à ${ltvCible} % : ${chf(reh)}`:'Réhaussement : —'; }
+      }}},
       scales:{
-        x:{border:{display:false},grid:{color:GRID}},
+        x:{type:'linear',min:baseYear,max:baseYear+horizon,border:{display:false},grid:{color:GRID},ticks:{stepSize:1,callback:v=>v}},
         y:{border:{display:false},grid:{color:GRID},ticks:{callback:v=>fmtNum.format(v)},beginAtZero:true},
         y1:{position:'right',border:{display:false},grid:{drawOnChartArea:false},min:0,suggestedMax:90,ticks:{callback:v=>v+' %'}}
       }}});
@@ -1268,6 +1364,7 @@ function renderParametres(){
       ${fieldNum('charges.revenuBrut','Revenu brut annuel du ménage',{ph:'optionnel'})}
       ${fieldNum('rendementBien','Appréciation annuelle estimée du bien %',{step:'0.1',hint:'Utilisé pour le calcul de la fortune nette'})}
       ${fieldNum('tauxRenovRisk','Taux hypothétique au renouvellement %',{step:'0.1',hint:'Scénario stress-test pour 2031'})}
+      ${fieldNum('plafond3a','Plafond 3a déductible / personne',{hint:'salarié avec LPP — 7258 en 2026'})}
     </div></div>
 
     <h3 class="section-title">Contrats 3a (amortissement indirect)</h3>
