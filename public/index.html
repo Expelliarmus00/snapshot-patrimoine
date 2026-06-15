@@ -314,9 +314,11 @@ input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5p
 
     <nav class="nav" id="nav">
       <button class="nav-item active" data-tab="recap"><span data-icon="grid"></span>Vue d'ensemble</button>
+      <button class="nav-item" data-tab="couts"><span data-icon="coins"></span>Coûts &amp; financement</button>
       <button class="nav-item" data-tab="cashflow"><span data-icon="wallet"></span>Cash-flow</button>
       <button class="nav-item" data-tab="calendrier"><span data-icon="calendar"></span>Calendrier</button>
-      <button class="nav-item" data-tab="projections"><span data-icon="trending"></span>Projections &amp; 3a</button>
+      <button class="nav-item" data-tab="projections"><span data-icon="trending"></span>3a &amp; amortissement</button>
+      <button class="nav-item" data-tab="scenarios"><span data-icon="gauge"></span>Projections &amp; risque</button>
       <button class="nav-item" data-tab="parametres"><span data-icon="sliders"></span>Paramètres</button>
     </nav>
 
@@ -351,9 +353,11 @@ input[type=range]{flex:1; min-width:220px; accent-color:var(--accent); height:5p
       </div>
 
       <section class="panel active" id="panel-recap"><h2 class="seclabel">Vue d'ensemble</h2><div id="recapBody"></div></section>
+      <section class="panel" id="panel-couts"><h2 class="seclabel">Coûts &amp; financement</h2><div id="coutsBody"></div></section>
       <section class="panel" id="panel-cashflow"><h2 class="seclabel">Cash-flow &amp; coût de détention</h2><div id="cashflowBody"></div></section>
       <section class="panel" id="panel-calendrier"><h2 class="seclabel">Calendrier &amp; échéances</h2><div id="calendrierBody"></div></section>
-      <section class="panel" id="panel-projections"><h2 class="seclabel">Projections &amp; 3e pilier</h2><div id="projectionsBody"></div></section>
+      <section class="panel" id="panel-projections"><h2 class="seclabel">3a &amp; amortissement</h2><div id="projectionsBody"></div></section>
+      <section class="panel" id="panel-scenarios"><h2 class="seclabel">Projections &amp; risque</h2><div id="scenariosBody"></div></section>
       <section class="panel" id="panel-parametres"><h2 class="seclabel">Paramètres</h2><div id="parametresBody"></div></section>
     </main>
   </div>
@@ -384,7 +388,9 @@ const ICONS={
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   house:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
   logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
-  menu:'<line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>'
+  menu:'<line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>',
+  coins:'<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+  gauge:'<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>'
 };
 function icon(name,size=16){return `<svg class="ic-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]||''}</svg>`;}
 function initIcons(){document.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=icon(el.dataset.icon, +(el.dataset.size||18));});}
@@ -658,26 +664,64 @@ function renderHeader(){
   document.getElementById('printDate').textContent='Édité le '+fmtDate(todayISO());
 }
 
-function renderAll(){ renderHeader(); renderRecap(); renderCashflow(); renderCalendrier(); renderProjections(); renderParametres(); save(); }
+function renderAll(){ renderHeader(); renderRecap(); renderCouts(); renderCashflow(); renderCalendrier(); renderProjections(); renderScenarios(); renderParametres(); save(); }
 
-/* ---------- E.1 VUE D'ENSEMBLE ---------- */
+/* ---------- E.1 VUE D'ENSEMBLE (épurée) ---------- */
 function renderRecap(){
+  const c=calc(), s=state;
+  const ltvWarn=c.ltv>80, effortWarn=c.tauxEffort!==null && c.tauxEffort>33;
+  const horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
+  const fortuneNetteFin=num(s.prix.prixTotalActe)*Math.pow(1+rb,horizon)-c.hyp;
+  document.getElementById('recapBody').innerHTML=`
+    <div class="grid kpis">
+      <div class="kpi ink"><div class="kpi-label">Valeur du bien</div><div class="kpi-value num">${chf(s.prix.prixTotalActe)}</div><div class="kpi-sub">prix à l'acte</div></div>
+      <div class="kpi"><div class="kpi-label">Hypothèque</div><div class="kpi-value num">${chf(c.hyp)}</div><div class="kpi-sub">LTV ${pct(c.ltv)}</div></div>
+      <div class="kpi pos"><div class="kpi-label">Fonds propres</div><div class="kpi-value num">${chf(c.fpApports)}</div><div class="kpi-sub">apportés</div></div>
+      <div class="kpi accent"><div class="kpi-label">Vous avez payé</div><div class="kpi-value num">${chf(c.decaisseReel)}</div><div class="kpi-sub">décaissement réel</div></div>
+    </div>
+
+    <div class="grid cols-2" style="margin-top:18px; align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Répartition du financement</h3></div>
+        <div class="chart-wrap h-md"><canvas id="chRecapDonut"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Santé du dossier</h3></div>
+        <table class="data"><tbody>
+          <tr><td>LTV (prêt / valeur)</td><td class="r"><span class="pill ${ltvWarn?'warn':'ok'}">${pct(c.ltv)}</span></td></tr>
+          <tr><td>Taux d'effort</td><td class="r">${c.tauxEffort===null?'<span class="muted">revenu à saisir</span>':`<span class="pill ${effortWarn?'warn':'ok'}">${pct(c.tauxEffort)}</span>`}</td></tr>
+          <tr><td>Coût de détention / mois</td><td class="r num">${chf(c.detentionAn/12)}</td></tr>
+          <tr><td>Fortune nette projetée <span class="muted small">(${horizon} ans)</span></td><td class="r num">${chf(fortuneNetteFin)}</td></tr>
+        </tbody></table>
+        ${(ltvWarn||effortWarn)?`<div style="margin-top:14px">${note('Point d\'attention', `${ltvWarn?'LTV supérieure à 80 %. ':''}${effortWarn?'Taux d\'effort au-dessus du seuil de 33 %.':''}`, true)}</div>`:''}
+      </div>
+    </div>
+
+    <div style="margin-top:18px">${note('En bref', `Le bien vaut <b>${chf(s.prix.prixTotalActe)}</b>, financé par <b>${chf(c.hyp)}</b> d'hypothèque (LTV ${pct(c.ltv)}) et <b>${chf(c.fpApports)}</b> de fonds propres. Vous avez réellement décaissé <b>${chf(c.decaisseReel)}</b>, frais compris.`)}</div>
+
+    <div class="flex gap8 wrap" style="margin-top:14px">
+      <button class="btn btn-soft btn-sm" onclick="switchTab('couts')">${icon('coins',15)} Détail des coûts</button>
+      <button class="btn btn-soft btn-sm" onclick="switchTab('cashflow')">${icon('wallet',15)} Cash-flow</button>
+      <button class="btn btn-soft btn-sm" onclick="switchTab('projections')">${icon('trending',15)} 3a &amp; amortissement</button>
+      <button class="btn btn-soft btn-sm" onclick="switchTab('scenarios')">${icon('gauge',15)} Projections &amp; risque</button>
+    </div>`;
+  buildRecapDonut(c);
+}
+
+/* ---------- E.1b COÛTS & FINANCEMENT (détail) ---------- */
+function renderCouts(){
   const c=calc(), s=state;
   const nk=esc(s.meta.nomKevin||'Kevin'), na=esc(s.meta.nomAurelia||'Aurélia');
   const pctBase=v=>s.prix.baseBancaire>0?pct(num(v)/c.base*100):'—';
-  const ltvWarn=c.ltv>80, effortWarn=c.tauxEffort!==null && c.tauxEffort>33;
   const catDot={LPP:'var(--primary-2)', Cash:'var(--coral-soft)', '3a':'var(--accent)'};
   const apports=Array.isArray(s.apports)?s.apports:[];
   const fraisItems=Array.isArray(s.fraisItems)?s.fraisItems:[];
-  document.getElementById('recapBody').innerHTML=`
+  document.getElementById('coutsBody').innerHTML=`
     <div class="grid kpis">
-      <div class="kpi ink"><div class="kpi-label">Prix d'acquisition</div><div class="kpi-value num">${chf(s.prix.prixTotalActe)}</div><div class="kpi-sub">Places de parc comprises</div></div>
-      <div class="kpi"><div class="kpi-label">Hypothèque</div><div class="kpi-value num">${chf(c.hyp)}</div><div class="kpi-sub">LTV ${pct(c.ltv)} · base ${chf(c.base)}</div></div>
-      <div class="kpi pos"><div class="kpi-label">Fonds propres versés</div><div class="kpi-value num">${chf(c.fpApports)}</div><div class="kpi-sub">LPP ${chf(c.sousLPP)} · cash ${chf(c.sousCash)} · 3a ${chf(c.sousTroisA)}</div></div>
-      <div class="kpi accent"><div class="kpi-label">Décaissement réel total</div><div class="kpi-value num">${chf(c.decaisseReel)}</div><div class="kpi-sub">fonds propres + frais ${chf(c.fraisTotal)}</div></div>
+      <div class="kpi ink"><div class="kpi-label">Coût total de l'opération</div><div class="kpi-value num">${chf(c.coutOperation)}</div><div class="kpi-sub">prix + frais</div></div>
+      <div class="kpi accent"><div class="kpi-label">Décaissement réel</div><div class="kpi-value num">${chf(c.decaisseReel)}</div><div class="kpi-sub">${nk} ${chf(c.decaisseKevin)} · ${na} ${chf(c.decaisseAurelia)}</div></div>
+      <div class="kpi"><div class="kpi-label">Frais &amp; taxes</div><div class="kpi-value num">${chf(c.fraisTotal)}</div><div class="kpi-sub">notaire · mutation · cédule</div></div>
     </div>
-
-    <div style="margin-top:18px">${note('Information — écart de prix', `Le prix d'acquisition à l'acte est de <b>${chf(s.prix.prixTotalActe)}</b>, places de parc comprises. Le <b>plan de financement a volontairement été établi sur ${chf(c.base)}</b> afin d'anticiper des plus-values — <b>ce n'est pas une erreur</b>. Les ratios (LTV, etc.) se calculent sur la base bancaire de ${chf(c.base)}.`)}</div>
 
     <div class="grid cols-2" style="margin-top:18px; align-items:start">
       <div class="card">
@@ -691,57 +735,21 @@ function renderRecap(){
             <tr class="total"><td>Total financement</td><td class="r num">${chf(c.hyp+c.sousLPP+c.sousCash+c.sousTroisA)}</td><td class="r num">${pctBase(c.hyp+c.sousLPP+c.sousCash+c.sousTroisA)}</td></tr>
           </tbody>
         </table>
-        <div style="margin-top:12px">${note('LTV', `Le rapport prêt/valeur (LTV) est de <b>${pct(c.ltv)}</b> (hypothèque ${chf(c.hyp)} / base bancaire ${chf(c.base)}). Le 3a (${chf(c.sousTroisA)}) est compté avec le cash. Le détail des apports figure plus bas.`)}</div>
       </div>
       <div class="card">
-        <div class="card-head"><h3>Répartition du financement</h3></div>
-        <div class="chart-wrap h-md"><canvas id="chRecapDonut"></canvas></div>
+        <div class="card-head"><h3>Prix d'acquisition</h3><span class="card-note">à l'acte</span></div>
+        <table class="data"><tbody>
+          <tr><td>Appartement (hors places)</td><td class="r num">${chf(s.prix.appartement,true)}</td></tr>
+          <tr><td>Place de parc couverte</td><td class="r num">${chf(s.prix.placeCouverte,true)}</td></tr>
+          <tr><td>Place de parc non couverte</td><td class="r num">${chf(s.prix.placeNonCouverte,true)}</td></tr>
+          <tr class="total"><td>Prix total à l'acte</td><td class="r num">${chf(s.prix.prixTotalActe,true)}</td></tr>
+        </tbody></table>
+        <div style="margin-top:12px">${note('Écart de prix voulu', `Le plan de financement a été établi sur <b>${chf(c.base)}</b> (base bancaire) alors que le prix à l'acte est de <b>${chf(s.prix.prixTotalActe)}</b> — pour anticiper des plus-values. La LTV se calcule sur la base bancaire.`)}</div>
       </div>
     </div>
 
-    <div class="grid cols-2" style="margin-top:18px; align-items:start">
-      <div class="card">
-        <div class="card-head"><h3>Ratios &amp; tenue des charges</h3></div>
-        <table class="data"><tbody>
-          <tr><td>LTV (hypothèque / base bancaire)</td><td class="r"><span class="pill ${ltvWarn?'warn':'ok'}">${pct(c.ltv)}</span></td></tr>
-          <tr><td>1er rang <span class="muted small">(sans amortissement)</span></td><td class="r num">${chf(c.r1)}</td></tr>
-          <tr><td>2e rang <span class="muted small">(à amortir)</span>${badge()}</td><td class="r num">${chf(c.r2)}</td></tr>
-          <tr><td>Intérêt théorique (5 %)</td><td class="r num">${chf(c.interetTheo)}</td></tr>
-          <tr><td>+ Amortissement</td><td class="r num">${chf(c.amort)}</td></tr>
-          <tr><td>+ Entretien (${pct(s.charges.entretienPct,0)} de la base)</td><td class="r num">${chf(c.entretienTheo)}</td></tr>
-          <tr class="sub"><td>Charge théorique annuelle</td><td class="r num">${chf(c.chargeTheoAnnuelle)}</td></tr>
-          <tr><td>Taux d'effort (charge / revenu brut)</td><td class="r">${c.tauxEffort===null?'<span class="muted">revenu à saisir</span>':`<span class="pill ${effortWarn?'warn':'ok'}">${pct(c.tauxEffort)}</span>`}</td></tr>
-        </tbody></table>
-        ${(ltvWarn||effortWarn)?`<div style="margin-top:14px">${note('Point d\'attention', `${ltvWarn?'LTV supérieure à 80 %. ':''}${effortWarn?'Taux d\'effort au-dessus du seuil de 33 %.':''}`, true)}</div>`:''}
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Ce que vous avez payé</h3><span class="card-note">décaissement réel</span></div>
-        <table class="data"><tbody>
-          <tr><td>${nk}</td><td class="r num">${chf(c.decaisseKevin,true)}</td></tr>
-          <tr><td>${na}</td><td class="r num">${chf(c.decaisseAurelia,true)}</td></tr>
-          <tr class="total"><td>Total décaissé</td><td class="r num">${chf(c.decaisseReel,true)}</td></tr>
-        </tbody></table>
-        <table class="data" style="margin-top:10px"><tbody>
-          <tr><td>Coût total de l'opération <span class="muted small">(prix + frais)</span></td><td class="r num">${chf(c.coutOperation,true)}</td></tr>
-          <tr><td>— financé par l'hypothèque</td><td class="r num">${chf(c.hyp,true)}</td></tr>
-          <tr class="sub"><td>— financé sur fonds propres</td><td class="r num">${chf(c.coutOperation-c.hyp,true)}</td></tr>
-        </tbody></table>
-        <div style="margin-top:12px">${note('Au centime près', `Le détail ligne par ligne (apports + frais notaire/mutation/cédule) est dans le tableau ci-dessous. Modifiable dans Paramètres → Coûts &amp; répartition.`)}</div>
-      </div>
-    </div>
-
-    <h3 class="section-title">Coûts détaillés du bien — au centime près</h3>
+    <h3 class="section-title">Détail au centime près — qui a payé quoi</h3>
     <div class="card">
-      <div class="card-head"><h3>Prix d'acquisition</h3><span class="card-note">à l'acte</span></div>
-      <table class="data"><tbody>
-        <tr><td>Appartement (hors places)</td><td class="r num">${chf(s.prix.appartement,true)}</td></tr>
-        <tr><td>Place de parc couverte</td><td class="r num">${chf(s.prix.placeCouverte,true)}</td></tr>
-        <tr><td>Place de parc non couverte</td><td class="r num">${chf(s.prix.placeNonCouverte,true)}</td></tr>
-        <tr class="total"><td>Prix total à l'acte</td><td class="r num">${chf(s.prix.prixTotalActe,true)}</td></tr>
-      </tbody></table>
-    </div>
-
-    <div class="card" style="margin-top:18px">
       <div class="card-head"><h3>Frais &amp; taxes</h3><span class="card-note">notaire · mutation · cédule · banque · courtier</span></div>
       <div class="table-scroll"><table class="data">
         <thead><tr><th>Poste</th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th></tr></thead>
@@ -764,7 +772,7 @@ function renderRecap(){
     </div>
 
     <div class="card" style="margin-top:18px">
-      <div class="card-head"><h3>Synthèse — décaissement réel</h3><span class="card-note">apports + frais, hors hypothèque</span></div>
+      <div class="card-head"><h3>Synthèse — ce que vous avez payé</h3><span class="card-note">apports + frais, hors hypothèque</span></div>
       <div class="table-scroll"><table class="data">
         <thead><tr><th></th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th></tr></thead>
         <tbody>
@@ -773,42 +781,8 @@ function renderRecap(){
           <tr class="total"><td>Total payé (décaissement réel)</td><td class="r num">${chf(c.decaisseKevin,true)}</td><td class="r num">${chf(c.decaisseAurelia,true)}</td><td class="r num">${chf(c.decaisseReel,true)}</td></tr>
         </tbody>
       </table></div>
-      <div style="margin-top:12px">${note('Lecture', `<b>${chf(c.decaisseReel,true)}</b> sont réellement sortis de vos poches (${nk} ${chf(c.decaisseKevin,true)} · ${na} ${chf(c.decaisseAurelia,true)}). Le reste du bien (${chf(c.hyp,true)}) est financé par l'hypothèque. Coût total de l'opération : <b>${chf(c.coutOperation,true)}</b>.`)}</div>
-    </div>
-
-    <h3 class="section-title">Fortune nette &amp; équité immobilière</h3>
-    <div class="grid cols-2" style="align-items:start">
-      <div class="card">
-        <div class="card-head"><h3>Projection sur ${num(s.fin.dureeAmort)} ans</h3><span class="card-note">appréciation ${pct(s.rendementBien,1)} / an</span></div>
-        <div class="chart-wrap h-md"><canvas id="chFortuneNette"></canvas></div>
-        <div class="legend">
-          <span><i style="background:var(--primary)"></i> Valeur du bien (estimée)</span>
-          <span><i style="color:var(--muted-2)" class="dash"></i> Dette résiduelle</span>
-          <span><i style="background:var(--accent)"></i> Fortune nette (équité)</span>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Valeur au terme (${new Date(s.meta.dateAcquisition||'').getFullYear()+num(s.fin.dureeAmort)||'—'})</h3></div>
-        <table class="data"><tbody>
-          ${(()=>{
-            const horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
-            const valFin=num(s.prix.prixTotalActe)*Math.pow(1+rb, horizon);
-            const detteFin=c.hyp; // amortissement indirect : dette constante
-            const equiteFin=valFin-detteFin;
-            const equiteAct=num(s.prix.prixTotalActe)-c.hyp;
-            return `
-          <tr><td>Valeur estimée au terme</td><td class="r num">${chf(valFin)}</td></tr>
-          <tr><td>Dette résiduelle</td><td class="r num">${chf(detteFin)}</td></tr>
-          <tr class="sub"><td>Fortune nette projetée</td><td class="r num">${chf(equiteFin)}</td></tr>
-          <tr><td>Équité actuelle (jour 1)</td><td class="r num">${chf(equiteAct)}</td></tr>
-          <tr><td>Gain d'équité sur ${horizon} ans</td><td class="r num" style="color:var(--accent)">${chf(equiteFin-equiteAct)}</td></tr>`;
-          })()}
-        </tbody></table>
-        <div style="margin-top:14px">${note('Hypothèse', `Appréciation <b>${pct(s.rendementBien,1)} / an</b> sur la valeur du bien. La dette reste constante (amortissement indirect). Modifiez le taux dans Paramètres → Hypothèses.`)}</div>
-      </div>
+      <div style="margin-top:12px">${note('Lecture', `<b>${chf(c.decaisseReel,true)}</b> sont réellement sortis de vos poches (${nk} ${chf(c.decaisseKevin,true)} · ${na} ${chf(c.decaisseAurelia,true)}). Le reste du bien (${chf(c.hyp,true)}) est financé par l'hypothèque. Édition dans Paramètres.`)}</div>
     </div>`;
-  buildRecapDonut(c);
-  buildFortuneNetteChart(c);
 }
 
 /* ---------- E.2 CASH-FLOW ---------- */
@@ -967,10 +941,54 @@ function renderProjections(){
       </div>
     </div>
 
-    <h3 class="section-title">Scénario de renouvellement — stress-test de taux</h3>
+    `;
+  buildProjChart(); buildCompareChart();
+}
+function onRendement(v){ state.rendement=num(v); document.getElementById('rendVal').textContent=pct(state.rendement,1); save(); renderProjections(); }
+function onTauxRenov(v){ state.tauxRenovRisk=num(v); const el=document.getElementById('renovVal'); if(el) el.textContent=pct(state.tauxRenovRisk,1); save(); renderScenarios(); }
+
+/* ---------- E.4b PROJECTIONS & RISQUE ---------- */
+function renderScenarios(){
+  const c=calc(), s=state;
+  const horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
+  const valFin=num(s.prix.prixTotalActe)*Math.pow(1+rb, horizon);
+  const detteFin=c.hyp, equiteFin=valFin-detteFin, equiteAct=num(s.prix.prixTotalActe)-c.hyp;
+  const anneeTerme=(new Date(s.meta.dateAcquisition||'').getFullYear()+horizon)||'—';
+  document.getElementById('scenariosBody').innerHTML=`
+    <div class="grid kpis">
+      <div class="kpi pos"><div class="kpi-label">Fortune nette projetée</div><div class="kpi-value num">${chf(equiteFin)}</div><div class="kpi-sub">dans ${horizon} ans (${anneeTerme})</div></div>
+      <div class="kpi accent"><div class="kpi-label">Gain d'équité</div><div class="kpi-value num">${chf(equiteFin-equiteAct)}</div><div class="kpi-sub">vs aujourd'hui (${chf(equiteAct)})</div></div>
+      <div class="kpi ink"><div class="kpi-label">Coût mensuel actuel</div><div class="kpi-value num">${chf(c.detentionAn/12)}</div><div class="kpi-sub">intérêts ${pct(c.tauxMoyen,2)}</div></div>
+    </div>
+
+    <h3 class="section-title">Fortune nette &amp; équité immobilière</h3>
     <div class="grid cols-2" style="align-items:start">
       <div class="card">
-        <div class="card-head"><h3>Si votre taux passe à… ${badge()}</h3><span class="card-note">à l'échéance 2031</span></div>
+        <div class="card-head"><h3>Projection sur ${horizon} ans</h3><span class="card-note">appréciation ${pct(s.rendementBien,1)} / an</span></div>
+        <div class="chart-wrap h-md"><canvas id="chFortuneNette"></canvas></div>
+        <div class="legend">
+          <span><i style="background:var(--primary)"></i> Valeur du bien (estimée)</span>
+          <span><i style="color:var(--muted-2)" class="dash"></i> Dette résiduelle</span>
+          <span><i style="background:var(--accent)"></i> Fortune nette (équité)</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Valeur au terme (${anneeTerme})</h3></div>
+        <table class="data"><tbody>
+          <tr><td>Valeur estimée au terme</td><td class="r num">${chf(valFin)}</td></tr>
+          <tr><td>Dette résiduelle</td><td class="r num">${chf(detteFin)}</td></tr>
+          <tr class="sub"><td>Fortune nette projetée</td><td class="r num">${chf(equiteFin)}</td></tr>
+          <tr><td>Équité actuelle (jour 1)</td><td class="r num">${chf(equiteAct)}</td></tr>
+          <tr><td>Gain d'équité sur ${horizon} ans</td><td class="r num" style="color:var(--accent)">${chf(equiteFin-equiteAct)}</td></tr>
+        </tbody></table>
+        <div style="margin-top:14px">${note('Hypothèse', `Appréciation <b>${pct(s.rendementBien,1)} / an</b> sur la valeur du bien. La dette reste constante (amortissement indirect). Taux modifiable dans Paramètres → Hypothèses.`)}</div>
+      </div>
+    </div>
+
+    <h3 class="section-title">Stress-test de taux — renouvellement à l'échéance</h3>
+    <div class="grid cols-2" style="align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Si votre taux passe à…</h3><span class="card-note">à l'échéance 2031</span></div>
         <div class="slider-row mb12">
           <label>Taux hypothétique au renouvellement</label>
           <input type="range" min="0.5" max="6" step="0.1" value="${s.tauxRenovRisk}" oninput="onTauxRenov(this.value)" />
@@ -992,7 +1010,7 @@ function renderProjections(){
       </div>
       <div class="card">
         <div class="card-head"><h3>Tableau de scénarios</h3></div>
-        <table class="data">
+        <div class="table-scroll"><table class="data">
           <thead><tr><th>Scénario</th><th class="r">Taux</th><th class="r">Intérêts/an</th><th class="r">Mensuel total</th><th class="r">Delta/mois</th></tr></thead>
           <tbody>
             ${[['Optimiste','0.5%',0.005],['Historique bas','1.0%',0.01],['Taux actuel',pct(c.tauxMoyen,2),c.tauxMoyen/100],['Neutre','2.5%',0.025],['Prudent','3.5%',0.035],['Pessimiste','5.0%',0.05]].map(([label,tauxStr,tx])=>{
@@ -1001,13 +1019,11 @@ function renderProjections(){
               return `<tr${isCurrent?' style="font-weight:700"':''}><td>${label}</td><td class="r">${tauxStr}</td><td class="r num">${chf(inter)}</td><td class="r num">${chf(det)}</td><td class="r num" style="color:${dlt>0?'var(--neg)':'var(--accent)'}">${dlt>=0?'+':''}${chf(dlt)}</td></tr>`;
             }).join('')}
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>`;
-  buildProjChart(); buildCompareChart();
+  buildFortuneNetteChart(c);
 }
-function onRendement(v){ state.rendement=num(v); document.getElementById('rendVal').textContent=pct(state.rendement,1); save(); renderProjections(); }
-function onTauxRenov(v){ state.tauxRenovRisk=num(v); document.getElementById('renovVal').textContent=pct(state.tauxRenovRisk,1); save(); renderProjections(); }
 async function addHistorique(){
   const date=document.getElementById('hDate').value||todayISO();
   const contratId=document.getElementById('hContrat').value;
@@ -1271,7 +1287,7 @@ function delContrat(id){
   toast('Contrat supprimé.', snap?()=>{ state.contrats.push(snap); save(); renderAll(); }:null);
 }
 function updContrat(id,k,v){ const c=state.contrats.find(x=>x.id===id); if(!c)return; c[k]=(k==='versement')?num(v):v; save(); renderRecapDepsDebounced(); }
-function renderRecapDeps(){ renderHeader(); renderRecap(); renderCashflow(); renderCalendrier(); renderProjections(); save(); }
+function renderRecapDeps(){ renderHeader(); renderRecap(); renderCouts(); renderCashflow(); renderCalendrier(); renderProjections(); renderScenarios(); save(); }
 
 /* --- Apports (fonds propres) --- */
 function updApport(id,k,v){ const a=state.apports.find(x=>x.id===id); if(!a)return; a[k]=(k==='kevin'||k==='aurelia')?num(v):v; save(); renderRecapDepsDebounced(); }
@@ -1298,8 +1314,8 @@ async function resetAll(){
 }
 
 /* ====================== H. NAVIGATION & EXPORTS ====================== */
-const TITLES={recap:'Vue d\'ensemble', cashflow:'Cash-flow', calendrier:'Calendrier', projections:'Projections & 3a', parametres:'Paramètres'};
-function renderByTab(tab){ ({recap:renderRecap, cashflow:renderCashflow, calendrier:renderCalendrier, projections:renderProjections, parametres:renderParametres}[tab]||(()=>{}))(); }
+const TITLES={recap:'Vue d\'ensemble', couts:'Coûts & financement', cashflow:'Cash-flow', calendrier:'Calendrier', projections:'3a & amortissement', scenarios:'Projections & risque', parametres:'Paramètres'};
+function renderByTab(tab){ ({recap:renderRecap, couts:renderCouts, cashflow:renderCashflow, calendrier:renderCalendrier, projections:renderProjections, scenarios:renderScenarios, parametres:renderParametres}[tab]||(()=>{}))(); }
 function switchTab(tab){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
