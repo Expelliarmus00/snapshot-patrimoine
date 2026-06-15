@@ -6,22 +6,22 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-dashboard
+  group: deploy-patrimoine
   cancel-in-progress: false
 
 jobs:
   deploy:
-    runs-on: [self-hosted, snapshot-dashboard]
+    runs-on: [self-hosted, snapshot-patrimoine]
     env:
-      DEPLOY_DIR: /opt/snapshot-dashboard
-      SERVICE: snapshot-dashboard
+      DEPLOY_DIR: /opt/snapshot-patrimoine
+      SERVICE: snapshot-patrimoine
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Sync source
-        run: rsync -a --delete --exclude '.git' --exclude 'node_modules' --exclude 'data' ./ "$DEPLOY_DIR/"
+        run: rsync -a --delete --exclude '.git' --exclude 'node_modules' --exclude '.env' --exclude 'data' ./ "$DEPLOY_DIR/"
 
       - name: Build & Deploy
         working-directory: ${{ env.DEPLOY_DIR }}
@@ -32,4 +32,4 @@ jobs:
           sudo systemctl restart "$SERVICE"
 
       - name: Health check
-        run: sleep 2 && curl -fsS http://127.0.0.1:4100/health | grep -q '"status":"ok"'
+        run: sleep 2 && curl -fsS http://127.0.0.1:4101/health | grep -q '"status":"ok"'
