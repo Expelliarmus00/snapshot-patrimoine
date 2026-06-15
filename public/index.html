@@ -687,11 +687,11 @@ function renderRecap(){
           <tbody>
             <tr><td><span class="dot" style="background:var(--primary)"></span>Hypothèque</td><td class="r num">${chf(c.hyp)}</td><td class="r num">${pctBase(c.hyp)}</td></tr>
             <tr><td><span class="dot" style="background:var(--primary-2)"></span>LPP / 2e pilier</td><td class="r num">${chf(c.sousLPP)}</td><td class="r num">${pctBase(c.sousLPP)}</td></tr>
-            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash (acomptes)</td><td class="r num">${chf(c.sousCash)}</td><td class="r num">${pctBase(c.sousCash)}</td></tr>
-            <tr class="total"><td>Total (hors 3a)</td><td class="r num">${chf(c.hyp+c.sousLPP+c.sousCash)}</td><td class="r num">${pctBase(c.hyp+c.sousLPP+c.sousCash)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash <span class="muted small">(acomptes + 3a ${chf(c.sousTroisA)})</span></td><td class="r num">${chf(c.sousCash+c.sousTroisA)}</td><td class="r num">${pctBase(c.sousCash+c.sousTroisA)}</td></tr>
+            <tr class="total"><td>Total financement</td><td class="r num">${chf(c.hyp+c.sousLPP+c.sousCash+c.sousTroisA)}</td><td class="r num">${pctBase(c.hyp+c.sousLPP+c.sousCash+c.sousTroisA)}</td></tr>
           </tbody>
         </table>
-        <div style="margin-top:12px">${note('LTV', `Le rapport prêt/valeur (LTV) est de <b>${pct(c.ltv)}</b> (hypothèque ${chf(c.hyp)} / base bancaire ${chf(c.base)}). Le 3a (${chf(c.sousTroisA)}) complète les fonds propres et figure dans le détail des coûts ci-dessous.`)}</div>
+        <div style="margin-top:12px">${note('LTV', `Le rapport prêt/valeur (LTV) est de <b>${pct(c.ltv)}</b> (hypothèque ${chf(c.hyp)} / base bancaire ${chf(c.base)}). Le 3a (${chf(c.sousTroisA)}) est compté avec le cash. Le détail des apports figure plus bas.`)}</div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Répartition du financement</h3></div>
@@ -1044,7 +1044,7 @@ Object.assign(Chart.defaults.plugins.tooltip,{backgroundColor:'#0B0B0B', padding
 
 function buildRecapDonut(c){
   destroyChart('recapDonut'); const s=state;
-  const data=[{l:'Hypothèque',v:c.hyp,col:COL.ink},{l:'LPP / 2e pilier',v:c.sousLPP,col:COL.n60},{l:'3a (fonds propres)',v:c.sousTroisA,col:COL.coral},{l:'Cash (acomptes)',v:c.sousCash,col:COL.coralSoft}].filter(d=>d.v>0);
+  const data=[{l:'Hypothèque',v:c.hyp,col:COL.ink},{l:'LPP / 2e pilier',v:c.sousLPP,col:COL.n60},{l:'Cash (+ 3a)',v:c.sousCash+c.sousTroisA,col:COL.coralSoft}].filter(d=>d.v>0);
   charts.recapDonut=new Chart(document.getElementById('chRecapDonut'),{type:'doughnut',
     data:{labels:data.map(d=>d.l), datasets:[{data:data.map(d=>d.v), backgroundColor:data.map(d=>d.col), borderWidth:3, borderColor:'#fff', hoverOffset:6}]},
     options:{responsive:true, maintainAspectRatio:false, cutout:'66%',
