@@ -463,7 +463,9 @@ const API='/api';
 let MODE='local', AUTH_ON=false, BOOTING=true, saveTimer=null;
 
 async function api(path, opts={}){
-  const res = await fetch(API+path, {credentials:'same-origin', headers:{'Content-Type':'application/json'}, ...opts});
+  // Content-Type uniquement s'il y a un corps : sinon Fastify rejette un DELETE sans body (400)
+  const headers = opts.body!=null ? {'Content-Type':'application/json'} : {};
+  const res = await fetch(API+path, {credentials:'same-origin', ...opts, headers:{...headers, ...(opts.headers||{})}});
   if(res.status===401){ const e=new Error('auth'); e.auth=true; throw e; }
   if(!res.ok) throw new Error('HTTP '+res.status);
   const ct=res.headers.get('content-type')||'';
@@ -954,10 +956,15 @@ function renderScenarios(){
   const valFin=num(s.prix.prixTotalActe)*Math.pow(1+rb, horizon);
   const detteFin=c.hyp, equiteFin=valFin-detteFin, equiteAct=num(s.prix.prixTotalActe)-c.hyp;
   const anneeTerme=(new Date(s.meta.dateAcquisition||'').getFullYear()+horizon)||'—';
+  const ltvAct=num(s.prix.prixTotalActe)>0?c.hyp/num(s.prix.prixTotalActe)*100:0;
+  const ltvFin=valFin>0?c.hyp/valFin*100:0;
+  const ltvCible=80;                                  // LTV cible pour un réhaussement
+  const rehausseFin=Math.max(0, valFin*ltvCible/100 - c.hyp);   // cash dégageable au terme à LTV 80 %
   document.getElementById('scenariosBody').innerHTML=`
     <div class="grid kpis">
       <div class="kpi pos"><div class="kpi-label">Fortune nette projetée</div><div class="kpi-value num">${chf(equiteFin)}</div><div class="kpi-sub">dans ${horizon} ans (${anneeTerme})</div></div>
-      <div class="kpi accent"><div class="kpi-label">Gain d'équité</div><div class="kpi-value num">${chf(equiteFin-equiteAct)}</div><div class="kpi-sub">vs aujourd'hui (${chf(equiteAct)})</div></div>
+      <div class="kpi accent"><div class="kpi-label">LTV projetée au terme</div><div class="kpi-value num">${pct(ltvFin)}</div><div class="kpi-sub">aujourd'hui ${pct(ltvAct)}</div></div>
+      <div class="kpi"><div class="kpi-label">Réhaussement possible</div><div class="kpi-value num">${chf(rehausseFin)}</div><div class="kpi-sub">cash dégageable à LTV ${ltvCible} %</div></div>
       <div class="kpi ink"><div class="kpi-label">Coût mensuel actuel</div><div class="kpi-value num">${chf(c.detentionAn/12)}</div><div class="kpi-sub">intérêts ${pct(c.tauxMoyen,2)}</div></div>
     </div>
 
@@ -970,6 +977,7 @@ function renderScenarios(){
           <span><i style="background:var(--primary)"></i> Valeur du bien (estimée)</span>
           <span><i style="color:var(--muted-2)" class="dash"></i> Dette résiduelle</span>
           <span><i style="background:var(--accent)"></i> Fortune nette (équité)</span>
+          <span><i style="color:var(--neg)" class="dash"></i> LTV (axe droit, %)</span>
         </div>
       </div>
       <div class="card">
@@ -978,10 +986,10 @@ function renderScenarios(){
           <tr><td>Valeur estimée au terme</td><td class="r num">${chf(valFin)}</td></tr>
           <tr><td>Dette résiduelle</td><td class="r num">${chf(detteFin)}</td></tr>
           <tr class="sub"><td>Fortune nette projetée</td><td class="r num">${chf(equiteFin)}</td></tr>
-          <tr><td>Équité actuelle (jour 1)</td><td class="r num">${chf(equiteAct)}</td></tr>
+          <tr><td>LTV au terme</td><td class="r num">${pct(ltvFin)}</td></tr>
           <tr><td>Gain d'équité sur ${horizon} ans</td><td class="r num" style="color:var(--accent)">${chf(equiteFin-equiteAct)}</td></tr>
         </tbody></table>
-        <div style="margin-top:14px">${note('Hypothèse', `Appréciation <b>${pct(s.rendementBien,1)} / an</b> sur la valeur du bien. La dette reste constante (amortissement indirect). Taux modifiable dans Paramètres → Hypothèses.`)}</div>
+        <div style="margin-top:14px">${note('Réhaussement de dette', `La valeur monte et la dette reste constante → la <b>LTV baisse de ${pct(ltvAct)} à ${pct(ltvFin)}</b> en ${horizon} ans. Pour revenir à une LTV de <b>${ltvCible} %</b>, vous pourriez ré-emprunter jusqu'à <b>${chf(rehausseFin)}</b> de cash au terme (survolez le graphique pour la LTV année par année).`)}</div>
       </div>
     </div>
 
@@ -1101,22 +1109,27 @@ function buildFortuneNetteChart(c){
   destroyChart('fortuneNette');
   const s=state, horizon=num(s.fin.dureeAmort), rb=num(s.rendementBien)/100;
   const baseYear=new Date(s.meta.dateAcquisition).getFullYear()||2026;
-  const labels=[], valeurs=[], dettes=[], equites=[];
+  const labels=[], valeurs=[], dettes=[], equites=[], ltvs=[];
   for(let y=0;y<=horizon;y++){
     labels.push(baseYear+y);
     const v=num(s.prix.prixTotalActe)*Math.pow(1+rb,y);
     const d=c.hyp; // indirect : dette constante
-    valeurs.push(v); dettes.push(d); equites.push(v-d);
+    valeurs.push(v); dettes.push(d); equites.push(v-d); ltvs.push(v>0?d/v*100:0);
   }
   charts.fortuneNette=new Chart(document.getElementById('chFortuneNette'),{type:'line',
     data:{labels, datasets:[
-      {label:'Valeur du bien',data:valeurs,borderColor:COL.ink,backgroundColor:'rgba(29,32,38,.06)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true},
-      {label:'Dette résiduelle',data:dettes,borderColor:COL.n40,borderDash:[6,5],borderWidth:2,pointRadius:0,fill:false},
-      {label:'Fortune nette',data:equites,borderColor:COL.coral,backgroundColor:'rgba(237,88,71,.10)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true}
+      {label:'Valeur du bien',data:valeurs,borderColor:COL.ink,backgroundColor:'rgba(29,32,38,.06)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true,yAxisID:'y'},
+      {label:'Dette résiduelle',data:dettes,borderColor:COL.n40,borderDash:[6,5],borderWidth:2,pointRadius:0,fill:false,yAxisID:'y'},
+      {label:'Fortune nette',data:equites,borderColor:COL.coral,backgroundColor:'rgba(237,88,71,.10)',borderWidth:2.5,pointRadius:0,tension:.2,fill:true,yAxisID:'y'},
+      {label:'LTV',data:ltvs,borderColor:COL.coralDeep,borderWidth:2,borderDash:[2,3],pointRadius:0,pointHoverRadius:4,tension:.2,fill:false,yAxisID:'y1'}
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${chf(ctx.parsed.y)}`}}},
-      scales:{x:{border:{display:false},grid:{color:GRID}},y:{border:{display:false},grid:{color:GRID},ticks:{callback:v=>fmtNum.format(v)},beginAtZero:true}}}});
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label==='LTV'?` LTV : ${ctx.parsed.y.toFixed(1).replace('.',',')} %`:` ${ctx.dataset.label} : ${chf(ctx.parsed.y)}`}}},
+      scales:{
+        x:{border:{display:false},grid:{color:GRID}},
+        y:{border:{display:false},grid:{color:GRID},ticks:{callback:v=>fmtNum.format(v)},beginAtZero:true},
+        y1:{position:'right',border:{display:false},grid:{drawOnChartArea:false},min:0,suggestedMax:90,ticks:{callback:v=>v+' %'}}
+      }}});
 }
 
 function buildCompareChart(){
