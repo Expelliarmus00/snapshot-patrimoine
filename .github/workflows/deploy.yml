@@ -1,0 +1,35 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dashboard
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, snapshot-dashboard]
+    env:
+      DEPLOY_DIR: /opt/snapshot-dashboard
+      SERVICE: snapshot-dashboard
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync source
+        run: rsync -a --delete --exclude '.git' --exclude 'node_modules' --exclude 'data' ./ "$DEPLOY_DIR/"
+
+      - name: Build & Deploy
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          npm ci
+          npm run build
+          npx prisma db push --skip-generate
+          sudo systemctl restart "$SERVICE"
+
+      - name: Health check
+        run: sleep 2 && curl -fsS http://127.0.0.1:4100/health | grep -q '"status":"ok"'
