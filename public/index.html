@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Patrimoine immobilier — Snapshot Media</title>
+<style>
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Regular.otf') format('opentype');font-weight:400;font-display:swap;}
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Medium.otf') format('opentype');font-weight:500;font-display:swap;}
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Semibold.otf') format('opentype');font-weight:600;font-display:swap;}
+@font-face{font-family:'Switzer';src:url('fonts/Switzer-Bold.otf') format('opentype');font-weight:700;font-display:swap;}
+@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Regular.otf') format('opentype');font-weight:400;font-display:swap;}
+@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Medium.otf') format('opentype');font-weight:500;font-display:swap;}
+@font-face{font-family:'Satoshi';src:url('fonts/Satoshi-Bold.otf') format('opentype');font-weight:700;font-display:swap;}
+
+:root{
+  --canvas:#ECECEC; --surface:#FFFFFF; --surface-2:#F5F5F5;
+  --border:#EAEAEA; --border-strong:#CFCFCF;
+  --ink:#0B0B0B; --ink-2:#4A4D54; --ink-3:#8A8A8A;
+  --forest:#1D2026; --coral:#ED5847; --coral-50:#E53A26; --coral-deep:#B82D1C; --coral-soft:#F6ABA2;
+  --green:#1A7A4A; --green-bg:#EAFAF1; --red-bg:#FDECE9;
+  --font-display:'Switzer',-apple-system,sans-serif;
+  --font-body:'Satoshi',-apple-system,sans-serif;
+  --sh:0 1px 2px rgba(11,11,11,.05),0 6px 18px rgba(11,11,11,.06);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;min-height:100%;}
+body{background:var(--canvas);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:600;letter-spacing:-.02em;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+.ic-svg{width:18px;height:18px;flex:none;}
+.hidden{display:none!important;}
+
+/* topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px clamp(20px,4vw,48px);border-bottom:1px solid var(--border);background:var(--canvas);position:sticky;top:0;z-index:10;}
+.brand{display:flex;align-items:center;gap:13px;text-decoration:none;color:inherit;}
+.brand-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(150deg,#2A2E36,#1D2026);border:1px solid rgba(255,255,255,.12);display:grid;place-items:center;color:var(--coral);}
+.brand-name{font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--ink);line-height:1;}
+.brand-sub{font-size:10.5px;color:var(--ink-3);margin-top:3px;letter-spacing:.06em;text-transform:uppercase;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.user-email{font-size:13px;font-weight:600;color:var(--ink-2);}
+.btn-sm{display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap;}
+.btn-sm:hover{background:var(--surface-2);}
+.btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--coral);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;transition:background .15s;}
+.btn-primary:hover{background:var(--coral-50);}
+.btn-primary:disabled{opacity:.6;cursor:default;}
+.btn-danger{background:var(--coral-deep);color:#fff;border:none;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-danger:hover{opacity:.85;}
+
+/* layout */
+.wrap{max-width:1200px;margin:0 auto;padding:40px clamp(20px,4vw,48px) 80px;}
+.page-header{margin-bottom:32px;}
+.page-kicker{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);}
+.page-title{font-size:28px;margin-top:6px;}
+.page-lead{font-size:14px;color:var(--ink-2);margin-top:8px;}
+
+.section-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:24px;box-shadow:var(--sh);}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+@media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}}
+@media(min-width:600px) and (max-width:900px){.grid-3{grid-template-columns:repeat(2,1fr);}.grid-4{grid-template-columns:repeat(2,1fr);}}
+
+/* stat tile */
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px;box-shadow:var(--sh);}
+.stat-label{font-size:11.5px;font-weight:600;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;}
+.stat-value{font-family:var(--font-display);font-size:26px;font-weight:700;letter-spacing:-.03em;color:var(--ink);}
+.stat-sub{font-size:12px;color:var(--ink-3);margin-top:4px;}
+.stat.positive .stat-value{color:var(--green);}
+.stat.negative .stat-value{color:var(--coral-deep);}
+
+/* table */
+table{width:100%;border-collapse:collapse;}
+th{font-size:11.5px;font-weight:700;color:var(--ink-3);letter-spacing:.04em;text-transform:uppercase;text-align:left;padding:10px 12px;border-bottom:2px solid var(--border);}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--ink);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--surface-2);}
+
+/* chart */
+.chart-wrap{position:relative;height:240px;}
+
+/* form overlay */
+.modal-bg{position:fixed;inset:0;background:rgba(11,11,11,.5);z-index:100;display:grid;place-items:center;padding:20px;}
+.modal{background:var(--surface);border-radius:22px;padding:32px;width:min(520px,100%);max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px -18px rgba(11,11,11,.3);}
+.modal h2{font-size:20px;margin-bottom:20px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:6px;}
+.field input,.field select{width:100%;border:1px solid var(--border-strong);border-radius:10px;padding:11px 13px;font-size:14px;color:var(--ink);}
+.field input:focus,.field select:focus{outline:none;border-color:var(--coral);box-shadow:0 0 0 3px rgba(237,88,71,.16);}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border);}
+
+/* badge */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:6px;padding:3px 8px;}
+.badge.positive{background:var(--green-bg);color:var(--green);}
+.badge.negative{background:var(--red-bg);color:var(--coral-deep);}
+
+/* loader */
+.loader{min-height:60vh;display:grid;place-items:center;color:var(--ink-3);font-size:14px;gap:12px;}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--coral);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<!-- topbar -->
+<header class="topbar">
+  <a class="brand" href="https://dashboard.snapshotmedia.ch">
+    <div class="brand-mark"><span data-icon="aperture" data-size="18"></span></div>
+    <div><div class="brand-name">Snapshot Media</div><div class="brand-sub">Patrimoine immo</div></div>
+  </a>
+  <div class="topbar-right">
+    <span class="user-email" id="userEmail"></span>
+    <a href="https://dashboard.snapshotmedia.ch" class="btn-sm"><span data-icon="grid" data-size="14"></span> Dashboard</a>
+  </div>
+</header>
+
+<!-- loading -->
+<div class="loader" id="loader">
+  <div class="spinner"></div>
+  <span>Chargement…</span>
+</div>
+
+<!-- main -->
+<main class="wrap hidden" id="main">
+  <div class="page-header">
+    <div class="page-kicker">Patrimoine immobilier</div>
+    <h1 class="page-title" id="propTitle">Bien immobilier</h1>
+    <p class="page-lead" id="propAddress"></p>
+  </div>
+
+  <!-- KPIs -->
+  <div class="section-title">Vue d'ensemble</div>
+  <div class="grid-4" style="margin-bottom:28px;">
+    <div class="stat"><div class="stat-label">Valeur du bien</div><div class="stat-value" id="kpiValeur">—</div><div class="stat-sub" id="kpiValeurDate"></div></div>
+    <div class="stat"><div class="stat-label">Prêt restant dû</div><div class="stat-value" id="kpiPret">—</div><div class="stat-sub" id="kpiPretTaux"></div></div>
+    <div class="stat" id="kpiCfCard"><div class="stat-label">Cash-flow mensuel</div><div class="stat-value" id="kpiCf">—</div><div class="stat-sub">loyer − charges − intérêts</div></div>
+    <div class="stat"><div class="stat-label">Total 3a constitué</div><div class="stat-value" id="kpi3a">—</div><div class="stat-sub" id="kpi3aSub"></div></div>
+  </div>
+
+  <!-- financement + cash-flow -->
+  <div class="section-title">Financement & cash-flow</div>
+  <div class="grid-2" style="margin-bottom:28px;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <h3 style="font-size:15px;">Financement</h3>
+        <button class="btn-sm" onclick="openConfig()"><span data-icon="edit" data-size="13"></span> Modifier</button>
+      </div>
+      <table>
+        <tbody id="finTable"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="font-size:15px;margin-bottom:18px;">Cash-flow mensuel</h3>
+      <div class="chart-wrap"><canvas id="cfChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 3a -->
+  <div class="section-title">Pilier 3a — Historique des valeurs</div>
+  <div class="card" style="margin-bottom:28px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h3 style="font-size:15px;">Évolution du capital 3a</h3>
+      <button class="btn-primary" onclick="open3aForm()"><span data-icon="plus" data-size="15"></span> Ajouter une valeur</button>
+    </div>
+    <div class="chart-wrap" style="height:200px;margin-bottom:24px;"><canvas id="chart3a"></canvas></div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>Date</th><th>Contrat</th><th>Valeur (CHF)</th><th>Variation</th><th></th></tr></thead>
+        <tbody id="hist3aTable"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- modal config -->
+<div class="modal-bg hidden" id="modalConfig">
+  <div class="modal">
+    <h2>Configuration du bien</h2>
+    <div class="field"><label>Nom du bien</label><input id="cfgNom" placeholder="ex: Appartement Auboranges" /></div>
+    <div class="field"><label>Adresse</label><input id="cfgAdresse" placeholder="ex: Route de X, 1674 Auboranges FR" /></div>
+    <div class="field-row">
+      <div class="field"><label>Valeur estimée (CHF)</label><input id="cfgValeur" type="number" placeholder="0" /></div>
+      <div class="field"><label>Date d'estimation</label><input id="cfgValeurDate" type="month" /></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Montant hypothèque (CHF)</label><input id="cfgHypo" type="number" placeholder="0" /></div>
+      <div class="field"><label>Taux d'intérêt (%)</label><input id="cfgTaux" type="number" step="0.01" placeholder="0.00" /></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Loyer mensuel (CHF)</label><input id="cfgLoyer" type="number" placeholder="0" /></div>
+      <div class="field"><label>Charges mensuelles (CHF)</label><input id="cfgCharges" type="number" placeholder="0" /></div>
+    </div>
+    <div class="field"><label>Contrats 3a (séparés par virgule)</label><input id="cfgContrats" placeholder="ex: Freizügigkeit, Frankia" /></div>
+    <div class="modal-footer">
+      <button class="btn-sm" onclick="closeConfig()">Annuler</button>
+      <button class="btn-primary" id="cfgSaveBtn" onclick="saveConfig()"><span data-icon="check" data-size="15"></span> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal 3a -->
+<div class="modal-bg hidden" id="modal3a">
+  <div class="modal">
+    <h2>Ajouter une valeur 3a</h2>
+    <div class="field-row">
+      <div class="field"><label>Date</label><input id="h3aDate" type="month" /></div>
+      <div class="field"><label>Contrat</label><select id="h3aContrat"><option value="">— choisir —</option></select></div>
+    </div>
+    <div class="field"><label>Valeur (CHF)</label><input id="h3aValeur" type="number" step="0.01" placeholder="0.00" /></div>
+    <div class="modal-footer">
+      <button class="btn-sm" onclick="close3aForm()">Annuler</button>
+      <button class="btn-primary" id="h3aSaveBtn" onclick="save3a()"><span data-icon="check" data-size="15"></span> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/chart.umd.js"></script>
+<script>
+/* ====================== icônes ====================== */
+const ICONS={
+  aperture:'<circle cx="12" cy="12" r="10"/><path d="m14.31 8 5.74 9.94"/><path d="M9.69 8h11.48"/><path d="m7.38 12 5.74-9.94"/><path d="M9.69 16 3.95 6.06"/><path d="M14.31 16H2.83"/><path d="m16.62 12-5.74 9.94"/>',
+  grid:'<rect width="7" height="9" x="3" y="3" rx="1.5"/><rect width="7" height="5" x="14" y="3" rx="1.5"/><rect width="7" height="9" x="14" y="12" rx="1.5"/><rect width="7" height="5" x="3" y="16" rx="1.5"/>',
+  edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>',
+};
+function icon(n,s=18){return`<svg class="ic-svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]||''}</svg>`;}
+function initIcons(r=document){r.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=icon(el.dataset.icon,+(el.dataset.size||18));});}
+
+/* ====================== helpers ====================== */
+const $=id=>document.getElementById(id);
+const fmt=v=>new Intl.NumberFormat('fr-CH',{maximumFractionDigits:0}).format(+v||0);
+const fmtChf=v=>'CHF '+fmt(v);
+const fmtPct=v=>(+v||0).toFixed(2)+'%';
+
+let STATE={};
+let cfChart=null, chart3a=null;
+
+/* ====================== auth + boot ====================== */
+async function boot(){
+  initIcons();
+  try{
+    const res=await fetch('/api/state',{credentials:'include',redirect:'manual'});
+    if(res.type==='opaqueredirect'||res.status===401||res.status===302){
+      window.location.href='https://dashboard.snapshotmedia.ch';
+      return;
+    }
+    STATE=await res.json();
+    $('userEmail').textContent=STATE._user?.email||'';
+    renderAll();
+    $('loader').classList.add('hidden');
+    $('main').classList.remove('hidden');
+  }catch(e){
+    window.location.href='https://dashboard.snapshotmedia.ch';
+  }
+}
+
+/* ====================== render ====================== */
+function renderAll(){
+  const s=STATE;
+  // KPIs
+  $('propTitle').textContent=s.nom||'Bien immobilier';
+  $('propAddress').textContent=s.adresse||'';
+  $('kpiValeur').textContent=s.valeur?fmtChf(s.valeur):'—';
+  $('kpiValeurDate').textContent=s.valeurDate?'Estimé '+s.valeurDate:'';
+  $('kpiPret').textContent=s.hypo?fmtChf(s.hypo):'—';
+  $('kpiPretTaux').textContent=s.taux?fmtPct(s.taux)+' / an':'';
+
+  const loyer=+(s.loyer||0), charges=+(s.charges||0);
+  const interets=s.hypo&&s.taux ? (+s.hypo * +s.taux/100/12) : 0;
+  const cf=loyer-charges-interets;
+  $('kpiCf').textContent=cf?fmtChf(cf):'—';
+  $('kpiCfCard').className='stat '+(cf>0?'positive':cf<0?'negative':'');
+
+  const hist=s.historique||[];
+  const total3a=sumLatest3a(hist);
+  $('kpi3a').textContent=total3a?fmtChf(total3a):'—';
+  $('kpi3aSub').textContent=total3a?'dernières valeurs par contrat':'aucune donnée';
+
+  // fin table
+  const rows=[
+    ['Prix d\'acquisition','achat','CHF'],
+    ['Apport','apport','CHF'],
+    ['Hypothèque','hypo','CHF'],
+    ['Taux d\'intérêt','taux','%'],
+    ['Loyer mensuel','loyer','CHF'],
+    ['Charges mensuelles','charges','CHF'],
+    ['Intérêts mensuels',null,'calc'],
+  ];
+  $('finTable').innerHTML=rows.map(([label,key,type])=>{
+    let val='—';
+    if(key===null) val=interets?fmtChf(interets):'—';
+    else if(type==='CHF') val=s[key]?fmtChf(s[key]):'—';
+    else if(type==='%') val=s[key]?fmtPct(s[key]):'—';
+    return`<tr><td style="color:var(--ink-3)">${label}</td><td style="font-weight:600;text-align:right">${val}</td></tr>`;
+  }).join('');
+
+  // cash-flow chart
+  renderCfChart(loyer, charges, interets);
+
+  // 3a
+  render3aTable(hist);
+  render3aChart(hist, (s.contrats||'').split(',').map(c=>c.trim()).filter(Boolean));
+}
+
+function sumLatest3a(hist){
+  const byContrat={};
+  for(const h of hist){
+    if(!byContrat[h.contratId]||h.date>byContrat[h.contratId].date) byContrat[h.contratId]=h;
+  }
+  return Object.values(byContrat).reduce((sum,h)=>sum+(+h.valeur||0),0);
+}
+
+function renderCfChart(loyer,charges,interets){
+  if(cfChart) cfChart.destroy();
+  const ctx=$('cfChart');
+  cfChart=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:['Loyer','Charges','Intérêts','Net'],
+      datasets:[{
+        data:[loyer,-charges,-interets,loyer-charges-interets],
+        backgroundColor:['#1A7A4A','#ED5847','#ED5847',loyer-charges-interets>=0?'#1A7A4A':'#B82D1C'],
+        borderRadius:6,
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>'CHF '+fmt(ctx.raw)}}},
+      scales:{y:{ticks:{callback:v=>'CHF '+fmt(v)},grid:{color:'#EAEAEA'}},x:{grid:{display:false}}}
+    }
+  });
+}
+
+function render3aChart(hist,contrats){
+  if(chart3a) chart3a.destroy();
+  if(!hist.length) return;
+
+  const dates=[...new Set(hist.map(h=>h.date))].sort();
+  const series=contrats.length?contrats:[...new Set(hist.map(h=>h.contratId))];
+  const COLORS=['#ED5847','#1D2026','#1A7A4A','#F6ABA2','#4A4D54'];
+
+  const datasets=series.map((c,i)=>{
+    const data=dates.map(d=>{
+      const last=hist.filter(h=>h.contratId===c&&h.date<=d).sort((a,b)=>b.date.localeCompare(a.date))[0];
+      return last?+last.valeur:null;
+    });
+    return{label:c,data,borderColor:COLORS[i%COLORS.length],backgroundColor:'transparent',tension:.3,spanGaps:true,pointRadius:4};
+  });
+
+  chart3a=new Chart($('chart3a'),{
+    type:'line',
+    data:{labels:dates,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{size:12},boxWidth:12}}},
+      scales:{y:{ticks:{callback:v=>'CHF '+fmt(v)},grid:{color:'#EAEAEA'}},x:{grid:{display:false}}}
+    }
+  });
+}
+
+function render3aTable(hist){
+  if(!hist.length){
+    $('hist3aTable').innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--ink-3);padding:24px">Aucune donnée — ajoutez une première valeur.</td></tr>';
+    return;
+  }
+  const sorted=[...hist].sort((a,b)=>b.date.localeCompare(a.date)||b.contratId.localeCompare(a.contratId));
+  $('hist3aTable').innerHTML=sorted.map(h=>{
+    const prev=hist.filter(x=>x.contratId===h.contratId&&x.date<h.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+    let badge='';
+    if(prev){
+      const diff=+h.valeur-+prev.valeur;
+      const pct=(diff/+prev.valeur*100).toFixed(1);
+      badge=`<span class="badge ${diff>=0?'positive':'negative'}">${diff>=0?'+':''}${fmtChf(diff)} (${pct}%)</span>`;
+    }
+    return`<tr>
+      <td>${h.date}</td>
+      <td style="font-weight:600">${h.contratId}</td>
+      <td>${fmtChf(h.valeur)}</td>
+      <td>${badge}</td>
+      <td><button class="btn-danger" onclick="del3a('${h.id}')">${icon('trash',12)}</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ====================== config modal ====================== */
+function openConfig(){
+  const s=STATE;
+  $('cfgNom').value=s.nom||'';
+  $('cfgAdresse').value=s.adresse||'';
+  $('cfgValeur').value=s.valeur||'';
+  $('cfgValeurDate').value=s.valeurDate||'';
+  $('cfgHypo').value=s.hypo||'';
+  $('cfgTaux').value=s.taux||'';
+  $('cfgLoyer').value=s.loyer||'';
+  $('cfgCharges').value=s.charges||'';
+  $('cfgContrats').value=s.contrats||'';
+  $('modalConfig').classList.remove('hidden');
+}
+function closeConfig(){$('modalConfig').classList.add('hidden');}
+
+async function saveConfig(){
+  const btn=$('cfgSaveBtn'); btn.disabled=true;
+  const body={
+    nom:$('cfgNom').value.trim(),
+    adresse:$('cfgAdresse').value.trim(),
+    valeur:+$('cfgValeur').value||0,
+    valeurDate:$('cfgValeurDate').value,
+    hypo:+$('cfgHypo').value||0,
+    taux:+$('cfgTaux').value||0,
+    loyer:+$('cfgLoyer').value||0,
+    charges:+$('cfgCharges').value||0,
+    contrats:$('cfgContrats').value.trim(),
+  };
+  try{
+    await fetch('/api/config',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    Object.assign(STATE,body);
+    renderAll();
+    closeConfig();
+  }finally{ btn.disabled=false; }
+}
+
+/* ====================== 3a modal ====================== */
+function open3aForm(){
+  const contrats=(STATE.contrats||'').split(',').map(c=>c.trim()).filter(Boolean);
+  const sel=$('h3aContrat');
+  sel.innerHTML='<option value="">— choisir —</option>'+contrats.map(c=>`<option>${c}</option>`).join('');
+  $('h3aDate').value=new Date().toISOString().slice(0,7);
+  $('h3aValeur').value='';
+  $('modal3a').classList.remove('hidden');
+}
+function close3aForm(){$('modal3a').classList.add('hidden');}
+
+async function save3a(){
+  const contrat=$('h3aContrat').value;
+  const date=$('h3aDate').value;
+  const valeur=+$('h3aValeur').value;
+  if(!contrat||!date||!valeur){ alert('Tous les champs sont requis.'); return; }
+  const btn=$('h3aSaveBtn'); btn.disabled=true;
+  const id=`${contrat.replace(/\s+/g,'_')}_${date}`;
+  try{
+    const res=await fetch('/api/historique',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,date,contratId:contrat,valeur})});
+    if(res.ok){
+      const entry=await res.json();
+      STATE.historique=[...(STATE.historique||[]).filter(h=>h.id!==id),entry];
+      renderAll();
+      close3aForm();
+    }else{
+      const err=await res.json();
+      alert(err.error||'Erreur lors de l\'enregistrement.');
+    }
+  }finally{ btn.disabled=false; }
+}
+
+async function del3a(id){
+  if(!confirm('Supprimer cet enregistrement ?')) return;
+  await fetch(`/api/historique/${encodeURIComponent(id)}`,{method:'DELETE',credentials:'include'});
+  STATE.historique=(STATE.historique||[]).filter(h=>h.id!==id);
+  renderAll();
+}
+
+boot();
+</script>
+</body>
+</html>

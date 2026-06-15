@@ -1,0 +1,26 @@
+// Schéma Prisma — app Patrimoine Snapshot Media
+// SQLite (fichier auto-contenu) pour rester sans dépendance externe.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// App Patrimoine — configuration (blob JSON, 1 ligne).
+model PatrimoineConfig {
+  id   Int    @id
+  json String
+}
+
+// App Patrimoine — historique 3a APPEND-ONLY (suppression explicite uniquement).
+model Historique {
+  id        String   @id
+  date      String
+  contratId String
+  valeur    Float
+  createdAt DateTime @default(now())
+}

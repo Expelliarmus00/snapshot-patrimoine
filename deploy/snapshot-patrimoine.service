@@ -1,0 +1,15 @@
+[Unit]
+Description=Snapshot Patrimoine — dashboard immobilier
+After=network.target
+
+[Service]
+Type=simple
+User=github-runner
+WorkingDirectory=/opt/snapshot-patrimoine
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/opt/snapshot-patrimoine/.env
+
+[Install]
+WantedBy=multi-user.target
