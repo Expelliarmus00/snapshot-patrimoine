@@ -30,14 +30,25 @@ function calc(state) {
   const chargeTheoAnnuelle = interetTheo + amort + entretienTheo;
   const revenu = num(s.charges.revenuBrut);
   const tauxEffort = revenu > 0 ? chargeTheoAnnuelle / revenu * 100 : null;
-  const fp = s.fp;
-  const sousLPP = num(fp.lppKevin) + num(fp.lppAurelia);
-  const sousCash = num(fp.cashAcompte1) + num(fp.cashAcompte2);
-  const fpTotal = num(fp.total);
-  const fraisTotal = num(s.frais.notaire) + num(s.frais.dossierBanque) + num(s.frais.courtier);
+  // Apports ventilés Kevin/Aurélia
+  const apports = Array.isArray(s.apports) ? s.apports : [];
+  const apTot = a => num(a.kevin) + num(a.aurelia);
+  const sumCat = cat => apports.filter(a => a.cat === cat).reduce((x, a) => x + apTot(a), 0);
+  const sousLPP = sumCat('LPP'), sousCash = sumCat('Cash'), sousTroisA = sumCat('3a');
+  const apportKevin = apports.reduce((x, a) => x + num(a.kevin), 0);
+  const apportAurelia = apports.reduce((x, a) => x + num(a.aurelia), 0);
+  const fpApports = apportKevin + apportAurelia;
+  const fraisItems = Array.isArray(s.fraisItems) ? s.fraisItems : [];
+  const fraisTotal = fraisItems.reduce((x, f) => x + num(f.kevin) + num(f.aurelia), 0);
+  const fraisKevin = fraisItems.reduce((x, f) => x + num(f.kevin), 0);
+  const fraisAurelia = fraisItems.reduce((x, f) => x + num(f.aurelia), 0);
   const coutOperation = num(s.prix.prixTotalActe) + fraisTotal;
+  const decaisseReel = fpApports + fraisTotal;
+  const decaisseKevin = apportKevin + fraisKevin;
+  const decaisseAurelia = apportAurelia + fraisAurelia;
   const versement3aTotal = s.contrats.reduce((a, c) => a + num(c.versement), 0);
-  return { base, hyp, r1, r2, ltv, tauxMoyen, interetsAnnuels, chargesPPE, fondsReno, amort, detentionAn, interetTheo, entretienTheo, chargeTheoAnnuelle, tauxEffort, revenu, sousLPP, sousCash, fpTotal, fraisTotal, coutOperation, versement3aTotal };
+  return { base, hyp, r1, r2, ltv, tauxMoyen, interetsAnnuels, chargesPPE, fondsReno, amort, detentionAn, interetTheo, entretienTheo, chargeTheoAnnuelle, tauxEffort, revenu,
+    sousLPP, sousCash, sousTroisA, apportKevin, apportAurelia, fpApports, fraisTotal, fraisKevin, fraisAurelia, coutOperation, decaisseReel, decaisseKevin, decaisseAurelia, versement3aTotal };
 }
 
 function compareSeries(state, rendement) {
@@ -56,14 +67,33 @@ function compareSeries(state, rendement) {
 const S = {
   prix: { appartement: 1090000, placeCouverte: 25000, placeNonCouverte: 15000, prixTotalActe: 1130000, baseBancaire: 1150000 },
   fin: { hypotheque: 920000, deuxiemeRang: 154500, amortAnnuel: 10300, dureeAmort: 15 },
-  fp: { lppKevin: 86000, lppAurelia: 29000, cashAcompte1: 20000, cashAcompte2: 58000, troisA: 37000, total: 230000 },
-  frais: { notaire: null, dossierBanque: 920, courtier: 4600 },
+  fp: { total: 230000 },
+  apports: [
+    { id: 'a1', libelle: 'LPP — Kevin', cat: 'LPP', kevin: 86000, aurelia: 0 },
+    { id: 'a2', libelle: 'LPP — Aurélia', cat: 'LPP', kevin: 0, aurelia: 29000 },
+    { id: 'a3', libelle: 'Cash 1', cat: 'Cash', kevin: 10000, aurelia: 10000 },
+    { id: 'a4', libelle: 'Cash 2', cat: 'Cash', kevin: 29000, aurelia: 29000 },
+    { id: 'a5', libelle: '3a', cat: '3a', kevin: 18500, aurelia: 18500 },
+  ],
+  fraisItems: [
+    { id: 'f1', libelle: 'Émolument acte vente', kevin: 1357.50, aurelia: 1357.50 },
+    { id: 'f2', libelle: 'TVA vente', kevin: 109.95, aurelia: 109.95 },
+    { id: 'f3', libelle: 'RF vente', kevin: 615, aurelia: 615 },
+    { id: 'f4', libelle: 'Droits de mutation', kevin: 16950, aurelia: 16950 },
+    { id: 'f5', libelle: 'Émolument acte gage', kevin: 1170, aurelia: 1170 },
+    { id: 'f6', libelle: 'TVA gage', kevin: 94.78, aurelia: 94.77 },
+    { id: 'f7', libelle: 'RF gage', kevin: 510, aurelia: 510 },
+    { id: 'f8', libelle: 'Droit gages', kevin: 3450, aurelia: 3450 },
+    { id: 'f9', libelle: 'Dossier banque', kevin: 460, aurelia: 460 },
+    { id: 'f10', libelle: 'Courtier', kevin: 2300, aurelia: 2300 },
+  ],
   tranches: [{ id: 'x', montant: 920000, taux: 1.8, type: 'Fixe', debut: '2026-09-01', echeance: '2031-09-01' }],
   charges: { chargesPPE: null, fondsReno: null, tauxTheorique: 5, entretienPct: 1, revenuBrut: null },
   contrats: [{ id: 'a', titulaire: 'Kevin', banque: '', versement: 7258 }, { id: 'b', titulaire: 'Aurélia', banque: '', versement: 3042 }],
   historique: [],
   rendement: 4,
 };
+const round2 = n => Math.round(n * 100) / 100;
 
 // ── tests ──────────────────────────────────────────────────────────────────
 test('LTV ≈ 80 %', () => {
@@ -110,9 +140,53 @@ test('Taux d\'effort calculé avec revenu', () => {
   assert.ok(c.tauxEffort > 0 && c.tauxEffort < 100);
 });
 
-test('Coût total opération = prix acte + frais (notaire null → 0)', () => {
+test('Frais total = somme des actes notariés (48 514.45) + banque + courtier', () => {
   const c = calc(S);
-  assert.equal(c.coutOperation, 1130000 + 0 + 920 + 4600);
+  assert.equal(round2(c.fraisTotal), round2(38064.90 + 10449.55 + 920 + 4600)); // 54 034.45
+});
+
+test('Coût total opération = prix acte + frais total', () => {
+  const c = calc(S);
+  assert.equal(round2(c.coutOperation), round2(1130000 + c.fraisTotal));
+});
+
+test('Apports : agrégats LPP / Cash / 3a', () => {
+  const c = calc(S);
+  assert.equal(c.sousLPP, 115000);
+  assert.equal(c.sousCash, 78000);
+  assert.equal(c.sousTroisA, 37000);
+  assert.equal(c.fpApports, 230000); // = fonds propres exigés
+});
+
+test('Répartition Kevin / Aurélia des apports', () => {
+  const c = calc(S);
+  assert.equal(c.apportKevin, 86000 + 10000 + 29000 + 18500);   // 143 500
+  assert.equal(c.apportAurelia, 29000 + 10000 + 29000 + 18500); // 86 500
+  assert.equal(c.apportKevin + c.apportAurelia, c.fpApports);
+});
+
+test('Décaissement réel = apports + frais (au centime près)', () => {
+  const c = calc(S);
+  assert.equal(round2(c.decaisseReel), round2(c.fpApports + c.fraisTotal));
+  assert.equal(round2(c.decaisseKevin + c.decaisseAurelia), round2(c.decaisseReel));
+});
+
+test('Frais ventilés : Kevin + Aurélia = total frais', () => {
+  const c = calc(S);
+  assert.equal(round2(c.fraisKevin + c.fraisAurelia), round2(c.fraisTotal));
+});
+
+test('Décaissement ne contient PAS l\'hypothèque', () => {
+  const c = calc(S);
+  assert.ok(c.decaisseReel < c.hyp);            // 284k < 920k
+  assert.equal(round2(c.decaisseReel), round2(230000 + 54034.45)); // 284 034.45
+});
+
+test('Écart base bancaire / prix acte = 20 000 (anticipation plus-value)', () => {
+  const c = calc(S);
+  assert.equal(c.base - c.hyp, 230000);          // fonds propres exigés sur base bancaire
+  assert.equal(num(S.prix.prixTotalActe) - c.hyp, 210000); // apport "réel" sur prix acte
+  assert.equal(c.fpApports - (num(S.prix.prixTotalActe) - c.hyp), 20000); // surplus volontaire
 });
 
 test('Versement 3a total = somme des contrats', () => {

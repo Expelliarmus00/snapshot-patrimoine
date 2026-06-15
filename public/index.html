@@ -394,11 +394,15 @@ const STORE_KEY = 'dashboard_immo_auboranges_v1';
 
 function defaultData(){
   return {
-    meta:{ proprietaires:'Kevin Chinelli & Aurélia Mercier', bien:'Appartement neuf 5.5 pièces — PPE', lieu:'Auboranges (canton de Fribourg)', dateAcquisition:'2026-09-01' },
+    schemaV:2,
+    meta:{ proprietaires:'Kevin Chinelli & Aurélia Mercier', bien:'Appartement neuf 5.5 pièces — PPE', lieu:'Auboranges (canton de Fribourg)', dateAcquisition:'2026-09-01', nomKevin:'Kevin', nomAurelia:'Aurélia' },
     prix:{ appartement:1090000, placeCouverte:25000, placeNonCouverte:15000, prixTotalActe:1130000, baseBancaire:1150000 },
     fin:{ hypotheque:920000, deuxiemeRang:154500, amortAnnuel:10300, dureeAmort:15 },
-    fp:{ lppKevin:86000, lppAurelia:29000, cashAcompte1:20000, cashAcompte2:58000, troisA:37000, total:230000 },
-    frais:{ notaire:null, dossierBanque:920, courtier:4600 },
+    fp:{ total:230000 },   // fonds propres exigés par la banque (référence, pour écart)
+    // Apports = fonds propres réellement versés, ventilés Kevin / Aurélia
+    apports: defaultApports(),
+    // Frais & taxes détaillés (notaire, mutation, cédule, banque, courtier), ventilés Kevin / Aurélia
+    fraisItems: defaultFraisItems(),
     tranches:[ {id:uid(), montant:920000, taux:1.8, type:'Fixe', debut:'2026-09-01', echeance:'2031-09-01'} ],
     charges:{ chargesPPE:null, fondsReno:null, tauxTheorique:5, entretienPct:1, revenuBrut:null },
     contrats:[ {id:uid(), titulaire:'Kevin', banque:'', versement:7258}, {id:uid(), titulaire:'Aurélia', banque:'', versement:3042} ],
@@ -407,6 +411,31 @@ function defaultData(){
     rendementBien:1.5,   // % d'appréciation annuelle estimée du bien
     tauxRenovRisk:3.5    // taux hypothétique au renouvellement (stress-test)
   };
+}
+// Apports par défaut (LPP nominatif ; cash & 3a répartis 50/50 — à ajuster)
+function defaultApports(){
+  return [
+    {id:uid(), libelle:'LPP / 2e pilier — Kevin',  cat:'LPP',  kevin:86000, aurelia:0},
+    {id:uid(), libelle:'LPP / 2e pilier — Aurélia', cat:'LPP',  kevin:0,     aurelia:29000},
+    {id:uid(), libelle:'Cash — acompte 1 (18.03)',  cat:'Cash', kevin:10000, aurelia:10000},
+    {id:uid(), libelle:'Cash — acompte 2 (08.05)',  cat:'Cash', kevin:29000, aurelia:29000},
+    {id:uid(), libelle:'3a (fonds propres)',        cat:'3a',   kevin:18500, aurelia:18500},
+  ];
+}
+// Frais & taxes par défaut (chiffres réels des actes notariés FR ; répartition 50/50 par défaut)
+function defaultFraisItems(){
+  return [
+    {id:uid(), libelle:'Émolument acte de vente',            kevin:1357.50, aurelia:1357.50},
+    {id:uid(), libelle:'TVA (acte de vente)',                kevin:109.95,  aurelia:109.95},
+    {id:uid(), libelle:'Émolument registre foncier (vente)', kevin:615,     aurelia:615},
+    {id:uid(), libelle:'Droits de mutation (3 %)',           kevin:16950,   aurelia:16950},
+    {id:uid(), libelle:'Émolument acte de gage / cédule',    kevin:1170,    aurelia:1170},
+    {id:uid(), libelle:'TVA (acte de gage)',                 kevin:94.78,   aurelia:94.77},
+    {id:uid(), libelle:'Émolument registre foncier (gage)',  kevin:510,     aurelia:510},
+    {id:uid(), libelle:'Droit sur les gages (0.75 %)',       kevin:3450,    aurelia:3450},
+    {id:uid(), libelle:'Frais de dossier banque',            kevin:460,     aurelia:460},
+    {id:uid(), libelle:'Commission courtier',                kevin:2300,    aurelia:2300},
+  ];
 }
 
 /* ====================== B. PERSISTANCE & MIGRATION ====================== */
@@ -434,24 +463,55 @@ async function api(path, opts={}){
   const ct=res.headers.get('content-type')||'';
   return (res.status===204 || !ct.includes('application/json')) ? null : res.json();
 }
-function configPayload(){ const c={...state}; delete c.historique; delete c._auth; return c; }
+function configPayload(){ const c={...state}; delete c.historique; delete c._auth; delete c._user; return c; }
+
+// Migration de l'ancien modèle (fp.* / frais.*) vers apports[] / fraisItems[].
+// Opère sur les données BRUTES chargées (avant deepMerge) pour préserver les montants saisis.
+function migrateRaw(data){
+  if(!data || typeof data!=='object') return data;
+  if(!Array.isArray(data.apports) && data.fp){
+    const fp=data.fp;
+    const half=v=>Math.round((num(v)/2)*100)/100;
+    data.apports=[
+      {id:uid(), libelle:'LPP / 2e pilier — Kevin',  cat:'LPP',  kevin:num(fp.lppKevin),   aurelia:0},
+      {id:uid(), libelle:'LPP / 2e pilier — Aurélia', cat:'LPP',  kevin:0,                  aurelia:num(fp.lppAurelia)},
+      {id:uid(), libelle:'Cash — acompte 1',          cat:'Cash', kevin:half(fp.cashAcompte1), aurelia:num(fp.cashAcompte1)-half(fp.cashAcompte1)},
+      {id:uid(), libelle:'Cash — acompte 2',          cat:'Cash', kevin:half(fp.cashAcompte2), aurelia:num(fp.cashAcompte2)-half(fp.cashAcompte2)},
+      {id:uid(), libelle:'3a (fonds propres)',        cat:'3a',   kevin:half(fp.troisA),    aurelia:num(fp.troisA)-half(fp.troisA)},
+    ];
+  }
+  if(!Array.isArray(data.fraisItems)){
+    data.fraisItems=defaultFraisItems();
+    // Conserver d'éventuels montants banque/courtier déjà saisis
+    if(data.frais){
+      const fr=data.frais, find=re=>data.fraisItems.find(f=>re.test(f.libelle));
+      const b=find(/dossier banque/i); if(b && !isEmpty(fr.dossierBanque)){ b.kevin=num(fr.dossierBanque)/2; b.aurelia=num(fr.dossierBanque)/2; }
+      const co=find(/courtier/i);     if(co && !isEmpty(fr.courtier)){ co.kevin=num(fr.courtier)/2; co.aurelia=num(fr.courtier)/2; }
+    }
+  }
+  return data;
+}
 
 async function boot(){
   BOOTING=true;
   initIcons();
+  let migrated=false;
   try{
-    const data=await api('/state');
+    const raw=await api('/state');
+    migrated=!!raw && !raw.schemaV;
+    const data=migrateRaw(raw);
     if(!data || typeof data!=='object') throw new Error('payload');
     state=deepMerge(defaultData(), data);
     MODE='server'; AUTH_ON=!!data._auth; setSync('ok');
   }catch(err){
     if(err && err.auth){ showLogin(); return; }
     MODE='local';
-    try{ const raw=localStorage.getItem(STORE_KEY); if(raw) state=deepMerge(defaultData(), JSON.parse(raw)); }catch(e){}
+    try{ const raw=localStorage.getItem(STORE_KEY); if(raw) state=deepMerge(defaultData(), migrateRaw(JSON.parse(raw))); }catch(e){}
     setSync('local');
   }
   renderAll();
   BOOTING=false;
+  if(migrated) save(); // persiste la migration une fois le boot terminé
 }
 
 function save(){
@@ -539,14 +599,35 @@ function calc(){
   const chargeTheoAnnuelle=interetTheo+amort+entretienTheo;
   const revenu=num(s.charges.revenuBrut);
   const tauxEffort=revenu>0?chargeTheoAnnuelle/revenu*100:null;
-  const fp=s.fp;
-  const sousLPP=num(fp.lppKevin)+num(fp.lppAurelia);
-  const sousCash=num(fp.cashAcompte1)+num(fp.cashAcompte2);
-  const fpTotal=num(fp.total);
-  const fraisTotal=num(s.frais.notaire)+num(s.frais.dossierBanque)+num(s.frais.courtier);
-  const coutOperation=num(s.prix.prixTotalActe)+fraisTotal;
+
+  // --- Apports (fonds propres versés), ventilés Kevin / Aurélia ---
+  const apports=Array.isArray(s.apports)?s.apports:[];
+  const apTot=a=>num(a.kevin)+num(a.aurelia);
+  const sumCat=cat=>apports.filter(a=>a.cat===cat).reduce((x,a)=>x+apTot(a),0);
+  const sousLPP=sumCat('LPP'), sousCash=sumCat('Cash'), sousTroisA=sumCat('3a');
+  const apportKevin=apports.reduce((x,a)=>x+num(a.kevin),0);
+  const apportAurelia=apports.reduce((x,a)=>x+num(a.aurelia),0);
+  const fpApports=apportKevin+apportAurelia;
+  const fpTotal=fpApports;                 // fonds propres réellement versés
+  const fpExige=num(s.fp&&s.fp.total);     // fonds propres exigés par la banque (référence)
+
+  // --- Frais & taxes détaillés, ventilés Kevin / Aurélia ---
+  const fraisItems=Array.isArray(s.fraisItems)?s.fraisItems:[];
+  const frTot=f=>num(f.kevin)+num(f.aurelia);
+  const fraisTotal=fraisItems.reduce((x,f)=>x+frTot(f),0);
+  const fraisKevin=fraisItems.reduce((x,f)=>x+num(f.kevin),0);
+  const fraisAurelia=fraisItems.reduce((x,f)=>x+num(f.aurelia),0);
+
+  // --- Synthèses ---
+  const coutOperation=num(s.prix.prixTotalActe)+fraisTotal;   // prix + frais (hypothèque incluse)
+  const decaisseReel=fpApports+fraisTotal;                    // ce qui sort des poches (hors hypothèque)
+  const decaisseKevin=apportKevin+fraisKevin;
+  const decaisseAurelia=apportAurelia+fraisAurelia;
+
   const versement3aTotal=s.contrats.reduce((a,c)=>a+num(c.versement),0);
-  return {base,hyp,r1,r2,ltv,tauxMoyen,interetsAnnuels,chargesPPE,fondsReno,amort,detentionAn,interetTheo,entretienTheo,chargeTheoAnnuelle,tauxEffort,revenu,sousLPP,sousCash,fpTotal,fraisTotal,coutOperation,versement3aTotal};
+  return {base,hyp,r1,r2,ltv,tauxMoyen,interetsAnnuels,chargesPPE,fondsReno,amort,detentionAn,interetTheo,entretienTheo,chargeTheoAnnuelle,tauxEffort,revenu,
+    sousLPP,sousCash,sousTroisA,apportKevin,apportAurelia,fpApports,fpTotal,fpExige,
+    fraisTotal,fraisKevin,fraisAurelia,coutOperation,decaisseReel,decaisseKevin,decaisseAurelia,versement3aTotal};
 }
 function projectionSeries(c, rendement){
   const horizon=num(state.fin.dureeAmort), versement=c.versement3aTotal, cible=[], proj=[]; let v=0;
@@ -582,17 +663,21 @@ function renderAll(){ renderHeader(); renderRecap(); renderCashflow(); renderCal
 /* ---------- E.1 VUE D'ENSEMBLE ---------- */
 function renderRecap(){
   const c=calc(), s=state;
+  const nk=esc(s.meta.nomKevin||'Kevin'), na=esc(s.meta.nomAurelia||'Aurélia');
   const pctBase=v=>s.prix.baseBancaire>0?pct(num(v)/c.base*100):'—';
   const ltvWarn=c.ltv>80, effortWarn=c.tauxEffort!==null && c.tauxEffort>33;
+  const catDot={LPP:'var(--primary-2)', Cash:'var(--coral-soft)', '3a':'var(--accent)'};
+  const apports=Array.isArray(s.apports)?s.apports:[];
+  const fraisItems=Array.isArray(s.fraisItems)?s.fraisItems:[];
   document.getElementById('recapBody').innerHTML=`
     <div class="grid kpis">
       <div class="kpi ink"><div class="kpi-label">Prix d'acquisition</div><div class="kpi-value num">${chf(s.prix.prixTotalActe)}</div><div class="kpi-sub">Places de parc comprises</div></div>
       <div class="kpi"><div class="kpi-label">Hypothèque</div><div class="kpi-value num">${chf(c.hyp)}</div><div class="kpi-sub">LTV ${pct(c.ltv)} · base ${chf(c.base)}</div></div>
-      <div class="kpi pos"><div class="kpi-label">Fonds propres</div><div class="kpi-value num">${chf(c.fpTotal)}</div><div class="kpi-sub">LPP ${chf(c.sousLPP)} · cash ${chf(c.sousCash)} · 3a ${chf(s.fp.troisA)}</div></div>
-      <div class="kpi accent"><div class="kpi-label">Coût total de l'opération</div><div class="kpi-value num">${chf(c.coutOperation)}</div><div class="kpi-sub">Prix acte + frais ${chf(c.fraisTotal)}</div></div>
+      <div class="kpi pos"><div class="kpi-label">Fonds propres versés</div><div class="kpi-value num">${chf(c.fpApports)}</div><div class="kpi-sub">LPP ${chf(c.sousLPP)} · cash ${chf(c.sousCash)} · 3a ${chf(c.sousTroisA)}</div></div>
+      <div class="kpi accent"><div class="kpi-label">Décaissement réel total</div><div class="kpi-value num">${chf(c.decaisseReel)}</div><div class="kpi-sub">fonds propres + frais ${chf(c.fraisTotal)}</div></div>
     </div>
 
-    <div style="margin-top:18px">${note('Information — écart de prix', `Le prix d'acquisition à l'acte est de <b>${chf(s.prix.prixTotalActe)}</b>, places de parc comprises. Le <b>plan de financement a volontairement été établi sur ${chf(c.base)}</b> afin d'anticiper des plus-values (aménagements / valorisation future) — <b>ce n'est pas une erreur</b>. Les ratios (LTV, etc.) se calculent sur la base bancaire de ${chf(c.base)}. Ces valeurs sont éditables dans l'onglet Paramètres.`)}</div>
+    <div style="margin-top:18px">${note('Information — écart de prix', `Le prix d'acquisition à l'acte est de <b>${chf(s.prix.prixTotalActe)}</b>, places de parc comprises. Le <b>plan de financement a volontairement été établi sur ${chf(c.base)}</b> afin d'anticiper des plus-values — <b>ce n'est pas une erreur</b>. Les ratios (LTV, etc.) se calculent sur la base bancaire de ${chf(c.base)}.`)}</div>
 
     <div class="grid cols-2" style="margin-top:18px; align-items:start">
       <div class="card">
@@ -601,14 +686,12 @@ function renderRecap(){
           <thead><tr><th>Source</th><th class="r">Montant</th><th class="r">% base</th></tr></thead>
           <tbody>
             <tr><td><span class="dot" style="background:var(--primary)"></span>Hypothèque</td><td class="r num">${chf(c.hyp)}</td><td class="r num">${pctBase(c.hyp)}</td></tr>
-            <tr><td><span class="dot" style="background:var(--primary-2)"></span>LPP / 2e pilier — Kevin</td><td class="r num">${chf(s.fp.lppKevin)}</td><td class="r num">${pctBase(s.fp.lppKevin)}</td></tr>
-            <tr><td><span class="dot" style="background:var(--primary-2)"></span>LPP / 2e pilier — Aurélia</td><td class="r num">${chf(s.fp.lppAurelia)}</td><td class="r num">${pctBase(s.fp.lppAurelia)}</td></tr>
-            <tr><td><span class="dot" style="background:var(--accent)"></span>3a (fonds propres)${badge()}</td><td class="r num">${chf(s.fp.troisA)}</td><td class="r num">${pctBase(s.fp.troisA)}</td></tr>
-            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash — acompte 1 (18.03)</td><td class="r num">${chf(s.fp.cashAcompte1)}</td><td class="r num">${pctBase(s.fp.cashAcompte1)}</td></tr>
-            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash — acompte 2 (08.05)</td><td class="r num">${chf(s.fp.cashAcompte2)}</td><td class="r num">${pctBase(s.fp.cashAcompte2)}</td></tr>
-            <tr class="total"><td>Total financement</td><td class="r num">${chf(c.hyp+c.fpTotal)}</td><td class="r num">${pctBase(c.hyp+c.fpTotal)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--primary-2)"></span>LPP / 2e pilier</td><td class="r num">${chf(c.sousLPP)}</td><td class="r num">${pctBase(c.sousLPP)}</td></tr>
+            <tr><td><span class="dot" style="background:var(--coral-soft)"></span>Cash (acomptes)</td><td class="r num">${chf(c.sousCash)}</td><td class="r num">${pctBase(c.sousCash)}</td></tr>
+            <tr class="total"><td>Total (hors 3a)</td><td class="r num">${chf(c.hyp+c.sousLPP+c.sousCash)}</td><td class="r num">${pctBase(c.hyp+c.sousLPP+c.sousCash)}</td></tr>
           </tbody>
         </table>
+        <div style="margin-top:12px">${note('LTV', `Le rapport prêt/valeur (LTV) est de <b>${pct(c.ltv)}</b> (hypothèque ${chf(c.hyp)} / base bancaire ${chf(c.base)}). Le 3a (${chf(c.sousTroisA)}) complète les fonds propres et figure dans le détail des coûts ci-dessous.`)}</div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Répartition du financement</h3></div>
@@ -617,15 +700,6 @@ function renderRecap(){
     </div>
 
     <div class="grid cols-2" style="margin-top:18px; align-items:start">
-      <div class="card">
-        <div class="card-head"><h3>Frais d'acquisition</h3><span class="card-note">en sus des fonds propres</span></div>
-        <table class="data"><tbody>
-          <tr><td>Notaire + droits de mutation (FR)${badge()}</td><td class="r num">${isEmpty(s.frais.notaire)?'<span class="muted">à fournir</span>':chf(s.frais.notaire)}</td></tr>
-          <tr><td>Frais de dossier banque</td><td class="r num">${chf(s.frais.dossierBanque)}</td></tr>
-          <tr><td>Commission courtier en financement</td><td class="r num">${chf(s.frais.courtier)}</td></tr>
-          <tr class="total"><td>Total frais</td><td class="r num">${chf(c.fraisTotal)}</td></tr>
-        </tbody></table>
-      </div>
       <div class="card">
         <div class="card-head"><h3>Ratios &amp; tenue des charges</h3></div>
         <table class="data"><tbody>
@@ -640,6 +714,66 @@ function renderRecap(){
         </tbody></table>
         ${(ltvWarn||effortWarn)?`<div style="margin-top:14px">${note('Point d\'attention', `${ltvWarn?'LTV supérieure à 80 %. ':''}${effortWarn?'Taux d\'effort au-dessus du seuil de 33 %.':''}`, true)}</div>`:''}
       </div>
+      <div class="card">
+        <div class="card-head"><h3>Ce que vous avez payé</h3><span class="card-note">décaissement réel</span></div>
+        <table class="data"><tbody>
+          <tr><td>${nk}</td><td class="r num">${chf(c.decaisseKevin,true)}</td></tr>
+          <tr><td>${na}</td><td class="r num">${chf(c.decaisseAurelia,true)}</td></tr>
+          <tr class="total"><td>Total décaissé</td><td class="r num">${chf(c.decaisseReel,true)}</td></tr>
+        </tbody></table>
+        <table class="data" style="margin-top:10px"><tbody>
+          <tr><td>Coût total de l'opération <span class="muted small">(prix + frais)</span></td><td class="r num">${chf(c.coutOperation,true)}</td></tr>
+          <tr><td>— financé par l'hypothèque</td><td class="r num">${chf(c.hyp,true)}</td></tr>
+          <tr class="sub"><td>— financé sur fonds propres</td><td class="r num">${chf(c.coutOperation-c.hyp,true)}</td></tr>
+        </tbody></table>
+        <div style="margin-top:12px">${note('Au centime près', `Le détail ligne par ligne (apports + frais notaire/mutation/cédule) est dans le tableau ci-dessous. Modifiable dans Paramètres → Coûts &amp; répartition.`)}</div>
+      </div>
+    </div>
+
+    <h3 class="section-title">Coûts détaillés du bien — au centime près</h3>
+    <div class="card">
+      <div class="card-head"><h3>Prix d'acquisition</h3><span class="card-note">à l'acte</span></div>
+      <table class="data"><tbody>
+        <tr><td>Appartement (hors places)</td><td class="r num">${chf(s.prix.appartement,true)}</td></tr>
+        <tr><td>Place de parc couverte</td><td class="r num">${chf(s.prix.placeCouverte,true)}</td></tr>
+        <tr><td>Place de parc non couverte</td><td class="r num">${chf(s.prix.placeNonCouverte,true)}</td></tr>
+        <tr class="total"><td>Prix total à l'acte</td><td class="r num">${chf(s.prix.prixTotalActe,true)}</td></tr>
+      </tbody></table>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Frais &amp; taxes</h3><span class="card-note">notaire · mutation · cédule · banque · courtier</span></div>
+      <div class="table-scroll"><table class="data">
+        <thead><tr><th>Poste</th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th></tr></thead>
+        <tbody>
+          ${fraisItems.map(f=>`<tr><td>${esc(f.libelle)}</td><td class="r num">${chf(f.kevin,true)}</td><td class="r num">${chf(f.aurelia,true)}</td><td class="r num">${chf(num(f.kevin)+num(f.aurelia),true)}</td></tr>`).join('')}
+          <tr class="total"><td>Total frais &amp; taxes</td><td class="r num">${chf(c.fraisKevin,true)}</td><td class="r num">${chf(c.fraisAurelia,true)}</td><td class="r num">${chf(c.fraisTotal,true)}</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Apports / fonds propres versés</h3><span class="card-note">qui a financé quoi</span></div>
+      <div class="table-scroll"><table class="data">
+        <thead><tr><th>Apport</th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th></tr></thead>
+        <tbody>
+          ${apports.map(a=>`<tr><td><span class="dot" style="background:${catDot[a.cat]||'var(--ink-3)'}"></span>${esc(a.libelle)}</td><td class="r num">${chf(a.kevin,true)}</td><td class="r num">${chf(a.aurelia,true)}</td><td class="r num">${chf(num(a.kevin)+num(a.aurelia),true)}</td></tr>`).join('')}
+          <tr class="total"><td>Total apports</td><td class="r num">${chf(c.apportKevin,true)}</td><td class="r num">${chf(c.apportAurelia,true)}</td><td class="r num">${chf(c.fpApports,true)}</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-head"><h3>Synthèse — décaissement réel</h3><span class="card-note">apports + frais, hors hypothèque</span></div>
+      <div class="table-scroll"><table class="data">
+        <thead><tr><th></th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th></tr></thead>
+        <tbody>
+          <tr><td>Apports (fonds propres)</td><td class="r num">${chf(c.apportKevin,true)}</td><td class="r num">${chf(c.apportAurelia,true)}</td><td class="r num">${chf(c.fpApports,true)}</td></tr>
+          <tr><td>Frais &amp; taxes</td><td class="r num">${chf(c.fraisKevin,true)}</td><td class="r num">${chf(c.fraisAurelia,true)}</td><td class="r num">${chf(c.fraisTotal,true)}</td></tr>
+          <tr class="total"><td>Total payé (décaissement réel)</td><td class="r num">${chf(c.decaisseKevin,true)}</td><td class="r num">${chf(c.decaisseAurelia,true)}</td><td class="r num">${chf(c.decaisseReel,true)}</td></tr>
+        </tbody>
+      </table></div>
+      <div style="margin-top:12px">${note('Lecture', `<b>${chf(c.decaisseReel,true)}</b> sont réellement sortis de vos poches (${nk} ${chf(c.decaisseKevin,true)} · ${na} ${chf(c.decaisseAurelia,true)}). Le reste du bien (${chf(c.hyp,true)}) est financé par l'hypothèque. Coût total de l'opération : <b>${chf(c.coutOperation,true)}</b>.`)}</div>
     </div>
 
     <h3 class="section-title">Fortune nette &amp; équité immobilière</h3>
@@ -910,7 +1044,7 @@ Object.assign(Chart.defaults.plugins.tooltip,{backgroundColor:'#0B0B0B', padding
 
 function buildRecapDonut(c){
   destroyChart('recapDonut'); const s=state;
-  const data=[{l:'Hypothèque',v:c.hyp,col:COL.ink},{l:'LPP — Kevin',v:num(s.fp.lppKevin),col:COL.n60},{l:'LPP — Aurélia',v:num(s.fp.lppAurelia),col:COL.n40},{l:'3a (fonds propres)',v:num(s.fp.troisA),col:COL.coral},{l:'Cash (acomptes)',v:c.sousCash,col:COL.coralSoft}].filter(d=>d.v>0);
+  const data=[{l:'Hypothèque',v:c.hyp,col:COL.ink},{l:'LPP / 2e pilier',v:c.sousLPP,col:COL.n60},{l:'3a (fonds propres)',v:c.sousTroisA,col:COL.coral},{l:'Cash (acomptes)',v:c.sousCash,col:COL.coralSoft}].filter(d=>d.v>0);
   charts.recapDonut=new Chart(document.getElementById('chRecapDonut'),{type:'doughnut',
     data:{labels:data.map(d=>d.l), datasets:[{data:data.map(d=>d.v), backgroundColor:data.map(d=>d.col), borderWidth:3, borderColor:'#fff', hoverOffset:6}]},
     options:{responsive:true, maintainAspectRatio:false, cutout:'66%',
@@ -1004,7 +1138,8 @@ function recalcLight(){
 }
 
 function renderParametres(){
-  const s=state;
+  const s=state, c=calc();
+  const nk=esc(s.meta.nomKevin||'Kevin'), na=esc(s.meta.nomAurelia||'Aurélia');
   document.getElementById('parametresBody').innerHTML=`
     <div class="flex between center wrap gap12" style="margin-bottom:6px">
       <p class="muted small" style="max-width:540px; margin:0">Toutes les valeurs sont éditables ; chaque modification recalcule et redessine immédiatement KPI, tableaux et graphiques. Sauvegarde automatique.</p>
@@ -1021,6 +1156,8 @@ function renderParametres(){
       ${fieldText('meta.bien','Bien')}
       ${fieldText('meta.lieu','Lieu')}
       ${fieldText('meta.dateAcquisition','Date d\'acquisition / livraison',{type:'date',hint:'à confirmer'})}
+      ${fieldText('meta.nomKevin','Nom — colonne 1',{hint:'en-tête des tableaux de répartition'})}
+      ${fieldText('meta.nomAurelia','Nom — colonne 2',{hint:'en-tête des tableaux de répartition'})}
     </div></div>
 
     <h3 class="section-title">Prix d'acquisition</h3>
@@ -1040,22 +1177,43 @@ function renderParametres(){
       ${fieldNum('fin.dureeAmort','Durée d\'amortissement (ans)')}
     </div></div>
 
-    <h3 class="section-title">Fonds propres</h3>
-    <div class="card"><div class="fields-grid">
-      ${fieldNum('fp.lppKevin','LPP — Kevin')}
-      ${fieldNum('fp.lppAurelia','LPP — Aurélia')}
-      ${fieldNum('fp.cashAcompte1','Cash — acompte 1 (18.03)')}
-      ${fieldNum('fp.cashAcompte2','Cash — acompte 2 (08.05)')}
-      ${fieldNum('fp.troisA','3a (solde des fonds propres)',{badge:true})}
-      ${fieldNum('fp.total','Total fonds propres exigé')}
-    </div></div>
+    <h3 class="section-title">Apports / fonds propres &amp; répartition</h3>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 12px">Saisissez le montant versé par chacun. Le total de chaque ligne et la répartition globale se recalculent automatiquement.</p>
+      <div class="table-scroll"><table class="data edit-table">
+        <thead><tr><th style="min-width:170px">Libellé</th><th>Catégorie</th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th><th></th></tr></thead>
+        <tbody>${s.apports.map(a=>`<tr>
+          <td><input value="${esc(a.libelle)}" oninput="updApport('${esc(a.id)}','libelle',this.value)" /></td>
+          <td><select onchange="updApport('${esc(a.id)}','cat',this.value)">${['LPP','Cash','3a'].map(cat=>`<option ${a.cat===cat?'selected':''}>${cat}</option>`).join('')}</select></td>
+          <td><input type="number" step="0.01" value="${num(a.kevin)}" oninput="updApport('${esc(a.id)}','kevin',this.value)" /></td>
+          <td><input type="number" step="0.01" value="${num(a.aurelia)}" oninput="updApport('${esc(a.id)}','aurelia',this.value)" /></td>
+          <td class="r num">${chf(num(a.kevin)+num(a.aurelia),true)}</td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delApport('${esc(a.id)}')">${icon('x',15)}</button></td></tr>`).join('')}
+          <tr class="total"><td colspan="2">Total apports</td><td class="r num">${chf(c.apportKevin,true)}</td><td class="r num">${chf(c.apportAurelia,true)}</td><td class="r num">${chf(c.fpApports,true)}</td><td></td></tr>
+        </tbody>
+      </table></div>
+      <button class="btn btn-soft btn-sm mt8" onclick="addApport()">${icon('plus',15)} Ajouter un apport</button>
+      <div class="fields-grid" style="margin-top:14px">
+        ${fieldNum('fp.total','Fonds propres exigés par la banque',{hint:'référence — pour mesurer l\'écart avec les apports réels'})}
+      </div>
+    </div>
 
-    <h3 class="section-title">Frais d'acquisition</h3>
-    <div class="card"><div class="fields-grid">
-      ${fieldNum('frais.notaire','Notaire + droits de mutation (FR)',{badge:true,ph:'à fournir'})}
-      ${fieldNum('frais.dossierBanque','Frais de dossier banque')}
-      ${fieldNum('frais.courtier','Commission courtier')}
-    </div></div>
+    <h3 class="section-title">Frais &amp; taxes (notaire, mutation, cédule…) &amp; répartition</h3>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 12px">Tous les frais réels de l'opération, ventilés entre vous deux. Ajoutez autant de lignes que nécessaire (« S'ajoutent… »).</p>
+      <div class="table-scroll"><table class="data edit-table">
+        <thead><tr><th style="min-width:200px">Poste</th><th class="r">${nk}</th><th class="r">${na}</th><th class="r">Total</th><th></th></tr></thead>
+        <tbody>${s.fraisItems.map(f=>`<tr>
+          <td><input value="${esc(f.libelle)}" oninput="updFrais('${esc(f.id)}','libelle',this.value)" /></td>
+          <td><input type="number" step="0.01" value="${num(f.kevin)}" oninput="updFrais('${esc(f.id)}','kevin',this.value)" /></td>
+          <td><input type="number" step="0.01" value="${num(f.aurelia)}" oninput="updFrais('${esc(f.id)}','aurelia',this.value)" /></td>
+          <td class="r num">${chf(num(f.kevin)+num(f.aurelia),true)}</td>
+          <td><button class="btn btn-danger btn-sm btn-icon" onclick="delFrais('${esc(f.id)}')">${icon('x',15)}</button></td></tr>`).join('')}
+          <tr class="total"><td>Total frais &amp; taxes</td><td class="r num">${chf(c.fraisKevin,true)}</td><td class="r num">${chf(c.fraisAurelia,true)}</td><td class="r num">${chf(c.fraisTotal,true)}</td><td></td></tr>
+        </tbody>
+      </table></div>
+      <button class="btn btn-soft btn-sm mt8" onclick="addFrais()">${icon('plus',15)} Ajouter un frais</button>
+    </div>
 
     <h3 class="section-title">Tranches hypothécaires ${badge()}</h3>
     <div class="card">
@@ -1115,6 +1273,23 @@ function delContrat(id){
 function updContrat(id,k,v){ const c=state.contrats.find(x=>x.id===id); if(!c)return; c[k]=(k==='versement')?num(v):v; save(); renderRecapDepsDebounced(); }
 function renderRecapDeps(){ renderHeader(); renderRecap(); renderCashflow(); renderCalendrier(); renderProjections(); save(); }
 
+/* --- Apports (fonds propres) --- */
+function updApport(id,k,v){ const a=state.apports.find(x=>x.id===id); if(!a)return; a[k]=(k==='kevin'||k==='aurelia')?num(v):v; save(); renderRecapDepsDebounced(); }
+function addApport(){ state.apports.push({id:uid(),libelle:'Nouvel apport',cat:'Cash',kevin:0,aurelia:0}); save(); renderAll(); }
+function delApport(id){
+  const snap=state.apports.find(a=>a.id===id);
+  state.apports=state.apports.filter(a=>a.id!==id); save(); renderAll();
+  toast('Apport supprimé.', snap?()=>{ state.apports.push(snap); save(); renderAll(); }:null);
+}
+/* --- Frais & taxes --- */
+function updFrais(id,k,v){ const f=state.fraisItems.find(x=>x.id===id); if(!f)return; f[k]=(k==='kevin'||k==='aurelia')?num(v):v; save(); renderRecapDepsDebounced(); }
+function addFrais(){ state.fraisItems.push({id:uid(),libelle:'Nouveau frais',kevin:0,aurelia:0}); save(); renderAll(); }
+function delFrais(id){
+  const snap=state.fraisItems.find(f=>f.id===id);
+  state.fraisItems=state.fraisItems.filter(f=>f.id!==id); save(); renderAll();
+  toast('Frais supprimé.', snap?()=>{ state.fraisItems.push(snap); save(); renderAll(); }:null);
+}
+
 async function resetAll(){
   if(!confirm('Réinitialiser toutes les valeurs par défaut ? L\'historique 3a et toutes vos saisies seront effacés.')) return;
   if(MODE==='server'){ setSync('saving'); try{ for(const h of [...state.historique]) await api('/historique/'+h.id,{method:'DELETE'}); state=defaultData(); await api('/config',{method:'PUT', body:JSON.stringify(configPayload())}); setSync('ok'); }catch(e){ setSync('error'); toast('Échec de la réinitialisation serveur.'); return; } }
@@ -1138,13 +1313,28 @@ document.getElementById('nav').addEventListener('click', e=>{ const b=e.target.c
 
 function exportExcel(){
   const c=calc(), s=state;
+  const nk=s.meta.nomKevin||'Kevin', na=s.meta.nomAurelia||'Aurélia';
   const wb=XLSX.utils.book_new();
   const recap=[['Tableau de bord patrimonial — '+s.meta.lieu],['Propriétaires',s.meta.proprietaires],['Bien',s.meta.bien],[],
     ['Prix acquisition (acte)',num(s.prix.prixTotalActe)],['Base bancaire',c.base],['Hypothèque',c.hyp],['1er rang',c.r1],['2e rang',c.r2],['LTV %',+c.ltv.toFixed(2)],[],
-    ['Fonds propres total',c.fpTotal],['  LPP',c.sousLPP],['  Cash',c.sousCash],['  3a',num(s.fp.troisA)],[],
-    ['Frais total',c.fraisTotal],['Coût total opération',c.coutOperation],[],
+    ['Fonds propres versés',c.fpApports],['  LPP',c.sousLPP],['  Cash',c.sousCash],['  3a',c.sousTroisA],[],
+    ['Frais total',c.fraisTotal],['Coût total opération',c.coutOperation],['Décaissement réel',c.decaisseReel],[],
     ['Charge théorique annuelle',c.chargeTheoAnnuelle],['Taux d\'effort %',c.tauxEffort===null?'':+c.tauxEffort.toFixed(2)]];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(recap), 'Récap');
+  // Feuille coûts détaillés (au centime près, ventilé Kevin/Aurélia)
+  const cd=[['COÛTS DÉTAILLÉS DU BIEN — au centime près'],[],
+    ['Prix d\'acquisition'],['Appartement',num(s.prix.appartement)],['Place couverte',num(s.prix.placeCouverte)],['Place non couverte',num(s.prix.placeNonCouverte)],['Prix total acte',num(s.prix.prixTotalActe)],[],
+    ['Apports / fonds propres','Catégorie',nk,na,'Total'],
+    ...s.apports.map(a=>[a.libelle,a.cat,num(a.kevin),num(a.aurelia),num(a.kevin)+num(a.aurelia)]),
+    ['Total apports','',c.apportKevin,c.apportAurelia,c.fpApports],[],
+    ['Frais & taxes','',nk,na,'Total'],
+    ...s.fraisItems.map(f=>[f.libelle,'',num(f.kevin),num(f.aurelia),num(f.kevin)+num(f.aurelia)]),
+    ['Total frais & taxes','',c.fraisKevin,c.fraisAurelia,c.fraisTotal],[],
+    ['SYNTHÈSE','',nk,na,'Total'],
+    ['Décaissement réel (apports + frais)','',c.decaisseKevin,c.decaisseAurelia,c.decaisseReel],
+    ['Coût total de l\'opération','','','',c.coutOperation],
+    ['Financé par l\'hypothèque','','','',c.hyp]];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cd), 'Coûts détaillés');
   const cash=[['Poste','Annuel CHF','Mensuel CHF'],['Intérêts',c.interetsAnnuels,c.interetsAnnuels/12],['Amortissement (3a)',c.amort,c.amort/12],['Charges PPE',c.chargesPPE,c.chargesPPE/12],['Rénovation',c.fondsReno,c.fondsReno/12],['Coût total détention',c.detentionAn,c.detentionAn/12]];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cash), 'Cash-flow');
   const tr=[['Montant','Taux %','Type','Début','Échéance'],...s.tranches.map(t=>[num(t.montant),num(t.taux),t.type,t.debut,t.echeance])];
@@ -1152,7 +1342,7 @@ function exportExcel(){
   const hi=[['Date','Contrat','Valeur CHF'],...[...s.historique].sort((a,b)=>a.date.localeCompare(b.date)).map(h=>{ const ct=s.contrats.find(x=>x.id===h.contratId); return [h.date, ct?ct.titulaire:'', num(h.valeur)]; })];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hi), 'Historique 3a');
   XLSX.writeFile(wb, `dashboard-immo-${todayISO()}.xlsx`);
-  toast('Classeur Excel généré (4 feuilles).');
+  toast('Classeur Excel généré (5 feuilles).');
 }
 function exportPDF(){ window.print(); }
 window.addEventListener('beforeprint', ()=>{ Object.values(charts).forEach(ch=>{ try{ch.resize();}catch(e){} }); });
